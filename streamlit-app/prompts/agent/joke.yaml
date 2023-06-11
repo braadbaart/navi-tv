@@ -1,0 +1,5 @@
+_type: prompt
+input_variables:
+    ["emotion", "sentiment", "topic"]
+template:
+    I'm feeling {emotion}. Tell me a {sentiment} joke about {topic}.

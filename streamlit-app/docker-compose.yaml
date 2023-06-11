@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:latest
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes:
+      - data:/data
+  streamlit:
+    image: navi-demo
+    build:
+      context: .
+    ports:
+      - '8501:8501'
+volumes:
+  data:

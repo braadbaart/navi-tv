@@ -1,6 +1,9 @@
 [theme]
-primaryColor="#ff9860"
-backgroundColor="#FFFFFF"
-secondaryBackgroundColor="#f6f0f3"
-textColor="#2e2f36"
+primaryColor="purple"
+backgroundColor="#9F2B68"
+secondaryBackgroundColor="#9F2B68"
+textColor="#FFFFFF"
 font="sans serif"
+
+[browser]
+gatherUsageStats = false
