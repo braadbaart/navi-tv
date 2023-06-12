@@ -13,8 +13,9 @@ from langchain.prompts import (
 )
 from langchain.chains import ConversationChain
 from langchain.chat_models import ChatOpenAI
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferWindowMemory
 from langchain.memory import ChatMessageHistory
+from langchain.schema import messages_from_dict, messages_to_dict
 
 st.set_page_config(page_title="Navi conversational AI agent demo")
 st.write(st.session_state)
@@ -41,50 +42,67 @@ prompt = ChatPromptTemplate.from_messages([
     HumanMessagePromptTemplate.from_template("{input}")
 ])
 
-llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0)
-memory = ConversationBufferMemory(return_messages=True)
+
+@st.cache_resource
+def get_memory():
+    user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=10)
+    return user_conversation_memory
+
+
+@st.cache_resource
+def get_history():
+    user_conversation_history = ChatMessageHistory()
+    return user_conversation_history
+
+
+llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.8)
+memory = get_memory()
+history = get_history()
 conversation = ConversationChain(memory=memory, prompt=prompt, llm=llm)
 
+# Layout of input/response containers
+colored_header(label='', description='', color_name='orange-70')
+dialogue_container = st.container()
+input_container = st.container()
 
-if 'conversation_history' not in st.session_state:
-    st.session_state['agent'] = [f"Welcome to {conversational_style} Navi, how may I help you?"]
-    st.session_state['human'] = ['']
+
+if len(messages_to_dict(history.messages)) == 0:
+    agent_message = f"Welcome to {conversational_style} Navi, how may I help you?"
+    memory.chat_memory.add_ai_message(agent_message)
+    history.add_ai_message(agent_message)
+    st.session_state.waiting_for_user_input = True
 # else:
 
 
-# Layout of input/response containers
-input_container = st.container()
-colored_header(label='', description='', color_name='orange-70')
-response_container = st.container()
-history = ChatMessageHistory()
+if 'user_message' not in st.session_state:
+    st.session_state.user_message = ''
 
 
-def get_text():
-    input_text = st.text_input("You: ", "", key="input")
-    memory.chat_memory.add_user_message(input_text)
-    history.add_user_message(input_text)
-    return input_text
-
-
-with input_container:
-    user_input = get_text()
-    st.session_state["text"] = ""
+def process_user_input():
+    st.session_state.user_message = st.session_state.chat_dialogue_box
+    st.session_state.chat_dialogue_box = ''
 
 
 def generate_response(user_prompt):
     agent_response = conversation.predict(input=user_prompt)
     memory.chat_memory.add_ai_message(agent_response)
     history.add_ai_message(agent_response)
-    return agent_response
 
 
-with response_container:
-    if user_input:
-        response = generate_response(user_input)
-        st.session_state.human.append(user_input)
-        st.session_state.agent.append(response)
+with input_container:
+    st.text_input("You: ", value="", key="chat_dialogue_box", on_change=process_user_input)
+    if st.session_state.user_message:
+        memory.chat_memory.add_user_message(st.session_state.user_message)
+        history.add_user_message(st.session_state.user_message)
+        generate_response(st.session_state.user_message)
+        st.session_state.chat_log = messages_to_dict(history.messages)
 
-    if st.session_state['agent']:
-        for i in range(len(st.session_state['agent'])):
-            message(st.session_state['human'][i], is_user=True, key=str(i) + '_user')
-            message(st.session_state["agent"][i], key=str(i))
+
+with dialogue_container:
+    chat_history = messages_to_dict(history.messages)
+    if st.session_state.waiting_for_user_input:
+        for i in range(len(chat_history)):
+            if chat_history[i]['type'] == 'ai':
+                message(chat_history[i]['data']['content'], key=str(i))
+            else:
+                message(chat_history[i]['data']['content'], is_user=True, key=str(i) + '_user')
