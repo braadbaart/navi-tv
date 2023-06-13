@@ -1,4 +1,5 @@
 import os
+import json
 import redis
 import streamlit as st
 
@@ -6,14 +7,26 @@ import googleapiclient.discovery
 import googleapiclient.errors
 
 from datetime import datetime as dt
+
 from google.oauth2 import service_account
 
-scopes = ["https://www.googleapis.com/auth/youtube.readonly"]
-os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+from langchain.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate
+)
+from langchain.chains import ConversationChain
+from langchain.chat_models import ChatOpenAI
+from langchain.memory import ConversationBufferWindowMemory
+
+
+file_path = os.path.dirname(__file__)
 
 st.write(st.session_state)
 
 username = 'grumpy_old_fool'
+
 
 @st.cache_resource
 def init_userdb_connection():
@@ -37,63 +50,170 @@ def init_contentdb_connection():
 
 
 contentdb = init_contentdb_connection()
+mood_matrix = {
+    'anger': 'Surprised',
+    'joy': 'Excited',
+    'fear': 'Sad',
+    'sadness': 'Happy',
+    'love': 'Surprised'
+}
 
 
-api_service_name = "youtube"
-api_version = "v3"
-absolute_path = os.path.dirname(__file__)
-client_secrets_file = os.path.join(absolute_path, "../.streamlit/youtube-api.json")
-
-credentials = service_account.Credentials.from_service_account_file(client_secrets_file, scopes=scopes)
-youtube = googleapiclient.discovery.build(api_service_name, api_version, credentials=credentials)
-
-channels = ['youtube']
+@st.cache_resource
+def get_youtube_recommendation_memory():
+    user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=10)
+    return user_conversation_memory
 
 
-def get_user_content_history(user, num_messages=10):
-    return contentdb.lrange(user, start=-num_messages, end=-1)
+llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.8)
+youtube_recommendations = get_youtube_recommendation_memory()
 
 
+@st.cache_resource
+def build_youtube_api():
+    scopes = ["https://www.googleapis.com/auth/youtube.readonly"]
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+    api_service_name = "youtube"
+    api_version = "v3"
+    absolute_path = os.path.dirname(__file__)
+    client_secrets_file = os.path.join(absolute_path, "../.streamlit/youtube-api.json")
+    credentials = service_account.Credentials.from_service_account_file(client_secrets_file, scopes=scopes)
+    return googleapiclient.discovery.build(api_service_name, api_version, credentials=credentials)
 
-contentdb.xadd(
+
+youtube = build_youtube_api()
+channels = ['youtube', 'spotify', 'tiktok']
+
+
+def get_user_content_history_titles(user, num_messages=100):
+    content_history = contentdb.hgetall(user)
+    titles = []
+    for e in content_history:
+        content = json.loads(e[1].replace("b'", '"').replace("'", '"'))
+        if content['engagement']['clicked_on_item']:
+            titles.append(f'{content["content_metadata"]["title"]} ({content["content_metadata"]["creator"]})')
+    return ' and '.join(titles[-num_messages:])
+
+
+mood = st.selectbox(
+    'Emotion',
+    ['Surprised', 'Sad', 'Happy', 'Excited', 'Angry', 'Afraid'],
+)
+current_mood = st.session_state.user_emotion if 'user_emotion' in st.session_state.keys() else mood
+
+fitness_level = st.selectbox(
+    'Fitness level',
+    ['Neutral', 'Tired', 'Ready to go']
+)
+
+mental_energy = st.selectbox(
+    'Mental energy',
+    ['Neutral', 'Depleted', 'Fully charged']
+)
+
+motion_state = st.selectbox(
+    'Motion state',
+    ['Sitting down', 'Lying down', 'Seated for a long time', 'Just got up', 'Walking', 'Running']
+)
+
+interests = ' and '.join(st.session_state.interests) if 'interests' in st.session_state.keys() else ''
+style = st.session_state.conversational_style if 'conversational_style' in st.session_state else 'exciting'
+
+
+@st.cache_data
+def search_youtube(generated_query):
+    st.session_state.interaction_start_time = dt.now()
+    request = youtube.search().list(
+        part="snippet",
+        maxResults=10,
+        q=generated_query
+    )
+    return request.execute().get('items')
+
+
+@st.cache_data
+def generate_youtube_query(content_stream, style_, mood_, energy_, fitness_, motion_, interests_):
+    youtube_query_prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template_file(
+            template_file=os.path.join(file_path, '../prompts/content/youtube.yaml'),
+            input_variables=['style', 'target_mood', 'mental_energy', 'fitness_level', 'motion_state', 'interests']
+        ).format(
+            style=style_,
+            target_mood=mood_matrix.get(mood_),
+            mental_energy=energy_,
+            fitness_level=fitness_,
+            motion_state=motion_,
+            interests=interests_
+        ),
+        MessagesPlaceholder(variable_name='history'),
+        HumanMessagePromptTemplate.from_template('{input}')
+    ])
+    youtube_chatrecs = ConversationChain(memory=youtube_recommendations, prompt=youtube_query_prompt, llm=llm)
+    return youtube_chatrecs.predict(input=content_stream)
+
+
+@st.cache_data
+def parse_youtube_video_search_results(youtube_search_results):
+    content_items = []
+    for res in youtube_search_results:
+        if res['id']['kind'] == 'youtube#video':
+            content_items.append({
+                'content_id': res['id']['videoId'],
+                'title': res['snippet']['title'],
+                'creator': res['snippet']['channelTitle'],
+                'upload_date': res['snippet']['publishedAt']
+            })
+    return content_items
+
+
+user_content_history = get_user_content_history_titles(username)
+youtube_search_query = generate_youtube_query(
+    user_content_history, style, current_mood, mental_energy, fitness_level, motion_state, interests
+)
+st.write(youtube_search_query)
+youtube_videos = search_youtube(youtube_search_query)
+st.session_state.recommended_videos = parse_youtube_video_search_results(youtube_videos)
+
+
+def load_next_content_item():
+    if 'recommended_videos' in st.session_state:
+        content_item = st.session_state.recommended_videos.pop()
+        contentdb.hset(
             username,
             {
-                'channel': st.session_state.recommended_channel,
-                'mood': '',
-                'energy_level': '',
-                'topic': '',
+                'channel': 'youtube',
+                'mood': mood,
+                'fitness_level': fitness_level,
                 'context': {
-                    'hour_of_day': '',
-                    'motion_state': '',
-                    'mental_energy': ''
+                    'day_of_week': dt.now().isoweekday(),
+                    'hour_of_day': dt.now().strftime('%H'),
+                    'motion_state': motion_state,
+                    'mental_energy': mental_energy
                 },
-                'content_id': st.session_state.content_id,
+                'content_id': content_item['content_id'],
                 'content_metadata': {
-                    'type': 'video',
-                    'duration': '10m',
-                    'title': ''
+                    'type': 'youtube_video',
+                    'title': content_item['title'],
+                    'creator': content_item['creator'],
+                    'upload_date': content_item['upload_date']
                 },
-                'user_action': 'next',
                 'engagement': {
-                    'viewing_time': ''
+                    # 'time_on_screen': timedelta(dt.now() - st.session_state.interaction_start_time).seconds,
+                    'clicked_on_item': st.session_state.clicked_on_item
                 },
                 'timestamp': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
             }
         )
+        st.video(f'https://www.youtube.com/watch?v={content_item["content_id"]}')
 
 
-# request = youtube.search().list(
-#     part="snippet",
-#     maxResults=1,
-#     q="surfing"
-# )
-# response = request.execute()
-#
-# print(response)
-
-st.video('https://www.youtube.com/watch?v=OFvXuyITwBI')
-
-def load_next_content_item():
-    return True
-
-st.button('Next item', on_click=load_next_content_item)
+if st.button('Show me!'):
+    first_video = st.session_state.recommended_videos.pop()
+    st.video(f'https://www.youtube.com/watch?v={first_video["content_id"]}')
+    st.session_state.interaction_start_time = dt.now()
+    if st.button('Watched'):
+        st.session_state.clicked_on_item = True
+        load_next_content_item()
+    else:
+        st.session_state.clicked_on_item = False
+    st.button('Next item', on_click=load_next_content_item)

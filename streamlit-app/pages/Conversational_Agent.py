@@ -5,6 +5,8 @@ import streamlit as st
 from streamlit_chat import message
 from streamlit_extras.colored_header import colored_header
 
+from transformers import AutoTokenizer, AutoModelWithLMHead
+
 from langchain.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder,
@@ -61,8 +63,22 @@ def get_memory():
     return user_conversation_memory
 
 
-# def get_user_conversation_history(user, num_messages=10):
-#     return convdb.lrange(user, start=-num_messages, end=-1)
+@st.cache_resource
+def load_emotion_recognition_model():
+    tokenizer = AutoTokenizer.from_pretrained("mrm8488/t5-base-finetuned-emotion")
+    model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-emotion")
+    return tokenizer, model
+
+
+er_tokenizer, er_model = load_emotion_recognition_model()
+
+
+def detect_emotion(text):
+    input_ids = er_tokenizer.encode(text + '</s>', return_tensors='pt')
+    output = er_model.generate(input_ids=input_ids, max_length=2)
+    dec = [er_tokenizer.decode(ids) for ids in output]
+    label = dec[0]
+    return label
 
 
 def get_history():
@@ -110,6 +126,7 @@ with input_container:
         history.add_user_message(st.session_state.user_message)
         generate_response(st.session_state.user_message)
         st.session_state.chat_log = messages_to_dict(history.messages)
+        st.session_state.user_emotion = detect_emotion(st.session_state.user_message)
 
 
 with dialogue_container:

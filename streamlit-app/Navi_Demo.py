@@ -101,12 +101,19 @@ if conversational_style != user_data.get('conversational_style'):
 
 st.session_state['conversational_style'] = conversational_style
 
+saved_user_interests = user_data.get('user_interests').split(',') if user_data.get('user_interests', None) else None
+
+
+def update_user_interests():
+    if user_interests and set(user_interests) != set(user_data.get('user_interests', '').split(',')):
+        userdb.hset(username, 'user_interests', ','.join(user_interests))
+
+
 user_interests = st.multiselect(
     'Select your favorite activities', ['surfing', 'climbing', 'chess', 'reading', 'drinking'],
-    default=user_data.get('user_interests', '').split(',')
+    default=saved_user_interests, on_change=update_user_interests
 )
-if user_interests and set(user_interests) != set(user_data.get('user_interests', '').split(',')):
-    userdb.hset(username, 'user_interests', ','.join(user_interests))
+
 st.session_state['interests'] = user_interests
 
 st.write(f'You have selected the following conversational conversational_style: {conversational_style}')
