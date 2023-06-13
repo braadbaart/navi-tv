@@ -1,5 +1,6 @@
-import base64
+import json
 import redis
+import base64
 import streamlit as st
 
 st.set_page_config(
@@ -7,6 +8,9 @@ st.set_page_config(
     page_icon='images/logo.png',
     layout='wide',
 )
+
+username = 'grumpy_old_fool'
+
 
 def get_base64(bin_file):
     with open(bin_file, 'rb') as f:
@@ -17,12 +21,12 @@ def get_base64(bin_file):
 def set_background(png_file):
     bin_str = get_base64(png_file)
     page_bg_img = '''
-    <conversational_style>
+    <style>
     .stApp {
     background-image: url("data:image/png;base64,%s");
     background-size: cover;
     }
-    </conversational_style>
+    </style>
     ''' % bin_str
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
@@ -65,21 +69,44 @@ set_background("images/night_sky.png")
 
 
 @st.cache_resource
-def init_connection():
-    return redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+def init_userdb_connection():
+    return redis.StrictRedis(
+        host='localhost', port=st.secrets['redis']['port'], charset="utf-8", decode_responses=True, db=0
+    )
 
 
-conn = init_connection()
+userdb = init_userdb_connection()
+
+
+def get_user_data():
+    userdata = userdb.hgetall(username)
+    if userdata:
+        return userdata
+    else:
+        userdb.hset(username, 'username', username)
+        return {'username': username}
+
+
+user_data = get_user_data()
+st.write(user_data)
+style_options = ['quirky', 'dead serious', 'millennial', 'boomer', 'drunk', 'gen_x']
 conversational_style = st.selectbox(
-    'Select a conversational conversational_style',
-    ['quirky', 'dead serious', 'millennial', 'boomer', 'drunk', 'gen_x']
+    'Preferred conversational style',
+    style_options,
+    index=style_options.index(user_data.get('conversational_style', 'quirky'))
 )
+if conversational_style != user_data.get('conversational_style'):
+    st.write(f'Saving new conversational style: {conversational_style}')
+    userdb.hset(username, 'conversational_style', conversational_style)
 
 st.session_state['conversational_style'] = conversational_style
 
 user_interests = st.multiselect(
-    'Select your favorite activities', ['surfing', 'climbing', 'chess', 'reading', 'drinking']
+    'Select your favorite activities', ['surfing', 'climbing', 'chess', 'reading', 'drinking'],
+    default=user_data.get('user_interests', '').split(',')
 )
+if user_interests and set(user_interests) != set(user_data.get('user_interests', '').split(',')):
+    userdb.hset(username, 'user_interests', ','.join(user_interests))
 st.session_state['interests'] = user_interests
 
 st.write(f'You have selected the following conversational conversational_style: {conversational_style}')
