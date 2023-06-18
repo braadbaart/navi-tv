@@ -82,7 +82,7 @@ def detect_emotion(text):
 
 
 def get_history():
-    return RedisChatMessageHistory(session_id=username, url='redis://localhost:6379/1', key_prefix='')
+    return RedisChatMessageHistory(session_id=username, url='redis://localhost:6379/1', key_prefix=':conv')
 
 
 llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.8)

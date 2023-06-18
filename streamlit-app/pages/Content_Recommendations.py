@@ -88,10 +88,10 @@ channels = ['youtube', 'spotify', 'tiktok']
 def get_user_content_history_titles(user, num_messages=100):
     content_history = contentdb.hgetall(user)
     titles = []
-    for e in content_history:
-        content = json.loads(e[1].replace("b'", '"').replace("'", '"'))
-        if content['engagement']['clicked_on_item']:
-            titles.append(f'{content["content_metadata"]["title"]} ({content["content_metadata"]["creator"]})')
+    for k, v in content_history.items():
+        pc = json.loads(v)
+        if pc['engagement']['clicked_on_item']:
+            titles.append(f'{pc["content_metadata"]["title"]} ({pc["content_metadata"]["creator"]})')
     return ' and '.join(titles[-num_messages:])
 
 
@@ -120,7 +120,6 @@ interests = ' and '.join(st.session_state.interests) if 'interests' in st.sessio
 style = st.session_state.conversational_style if 'conversational_style' in st.session_state else 'exciting'
 
 
-@st.cache_data
 def search_youtube(generated_query):
     st.session_state.interaction_start_time = dt.now()
     request = youtube.search().list(
@@ -131,7 +130,6 @@ def search_youtube(generated_query):
     return request.execute().get('items')
 
 
-@st.cache_data
 def generate_youtube_query(content_stream, style_, mood_, energy_, fitness_, motion_, interests_):
     youtube_query_prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template_file(
@@ -152,7 +150,6 @@ def generate_youtube_query(content_stream, style_, mood_, energy_, fitness_, mot
     return youtube_chatrecs.predict(input=content_stream)
 
 
-@st.cache_data
 def parse_youtube_video_search_results(youtube_search_results):
     content_items = []
     for res in youtube_search_results:
@@ -180,7 +177,8 @@ def load_next_content_item():
         content_item = st.session_state.recommended_videos.pop()
         contentdb.hset(
             username,
-            {
+            dt.now().timestamp(),
+            json.dumps({
                 'channel': 'youtube',
                 'mood': mood,
                 'fitness_level': fitness_level,
@@ -198,11 +196,10 @@ def load_next_content_item():
                     'upload_date': content_item['upload_date']
                 },
                 'engagement': {
-                    # 'time_on_screen': timedelta(dt.now() - st.session_state.interaction_start_time).seconds,
                     'clicked_on_item': st.session_state.clicked_on_item
                 },
-                'timestamp': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
-            }
+                'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
+            })
         )
         st.video(f'https://www.youtube.com/watch?v={content_item["content_id"]}')
 
