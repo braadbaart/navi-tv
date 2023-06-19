@@ -1,5 +1,5 @@
 _type: prompt
 input_variables:
-    ["style", "target_mood", "mental_energy", "fitness_level", "motion_state", "interests"]
+    ["style", "target_mood", "mental_energy", "fitness_level", "motion_state", "channel_interests", "current_video"]
 template:
-    Generate a YouTube query for videos by creators with a {style} to get someone who is {mental_energy} and {motion_state} in a {target_mood} mood, with {fitness_level} energy levels and an interest in {interests}.
+    Generate a YouTube query for videos by creators with a {style} conversation style or target demographic to get someone who is {mental_energy} and {motion_state} in a {target_mood} mood, with {fitness_level} energy levels and an interest in {channel_interests}. The video should be different from {current_video}

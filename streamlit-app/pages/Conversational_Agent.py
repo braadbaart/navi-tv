@@ -78,7 +78,7 @@ def detect_emotion(text):
     output = er_model.generate(input_ids=input_ids, max_length=2)
     dec = [er_tokenizer.decode(ids) for ids in output]
     label = dec[0]
-    return label
+    return label.replace('<pad> ', '').replace(' <pad>', '')
 
 
 def get_history():
@@ -88,7 +88,6 @@ def get_history():
 llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.8)
 memory = get_memory()
 history = get_history()
-st.write(history.messages)
 conversation = ConversationChain(memory=memory, prompt=prompt, llm=llm)
 
 # Layout of input/response containers

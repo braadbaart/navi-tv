@@ -1,8 +1,8 @@
 [theme]
-primaryColor="purple"
-backgroundColor="#9F2B68"
-secondaryBackgroundColor="#9F4B68"
-textColor="#FFFFFF"
+primaryColor="orange"
+backgroundColor="#FFFFFF"
+secondaryBackgroundColor="#ADD8E6"
+textColor="#000000"
 font="sans serif"
 
 [browser]
