@@ -22,9 +22,6 @@ from langchain.schema import messages_to_dict
 
 
 file_path = os.path.dirname(__file__)
-
-st.write(st.session_state)
-
 username = 'grumpy_old_fool'
 
 
@@ -150,6 +147,7 @@ def search_youtube(generated_query):
     return request.execute().get('items')
 
 
+@st.cache_data
 def generate_youtube_query(style_, mood_, energy_, fitness_, motion_, interests_, text):
     previous_video = st.session_state.last_youtube_video if 'last_youtube_video' in st.session_state.keys() else ''
     youtube_query_prompt = ChatPromptTemplate.from_messages([
@@ -175,12 +173,12 @@ def generate_youtube_query(style_, mood_, energy_, fitness_, motion_, interests_
     return youtube_chatrecs.predict(input=text)
 
 
-@st.cache_data
 def parse_youtube_video_search_results(youtube_search_results):
     content_items = []
     for res in youtube_search_results:
         if res['id']['kind'] == 'youtube#video':
             content_items.append({
+                'content_type': 'youtube_video',
                 'content_id': res['id']['videoId'],
                 'title': res['snippet']['title'],
                 'creator': res['snippet']['channelTitle'],
@@ -202,7 +200,7 @@ st.session_state.recommended_videos = parse_youtube_video_search_results(youtube
 def load_next_content_item():
     if 'recommended_videos' in st.session_state:
         if len(st.session_state.recommended_videos) > 0:
-            content_item = st.session_state.recommended_videos.pop()
+            st.session_state.content_item = st.session_state.recommended_videos.pop()
             contentdb.hset(
                 username,
                 dt.now().timestamp(),
@@ -216,12 +214,12 @@ def load_next_content_item():
                         'motion_state': motion_state,
                         'mental_energy': mental_energy
                     },
-                    'content_id': content_item['content_id'],
+                    'content_id': st.session_state.content_item['content_id'],
                     'content_metadata': {
                         'type': 'youtube_video',
-                        'title': content_item['title'],
-                        'creator': content_item['creator'],
-                        'upload_date': content_item['upload_date']
+                        'title': st.session_state.content_item['title'],
+                        'creator': st.session_state.content_item['creator'],
+                        'upload_date': st.session_state.content_item['upload_date']
                     },
                     'engagement': {
                         'clicked_on_item': st.session_state.clicked_on_item
@@ -229,27 +227,25 @@ def load_next_content_item():
                     'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
                 })
             )
-            st.video(f'https://www.youtube.com/watch?v={content_item["content_id"]}')
-            st.session_state.last_youtube_video = first_video['title']
+            st.video(f'https://www.youtube.com/watch?v={st.session_state.content_item["content_id"]}')
+            st.session_state.last_youtube_video = st.session_state.content_item['title']
 
 
-input_container = st.container()
-
-if st.button('Show me!'):
-    if len(st.session_state.recommended_videos) > 0:
-        first_video = st.session_state.recommended_videos.pop()
-        st.session_state.last_youtube_video = first_video['title']
-        youtube_recommendations.chat_memory.add_ai_message(first_video['title'])
-        st.video(f'https://www.youtube.com/watch?v={first_video["content_id"]}')
-        st.session_state.interaction_start_time = dt.now().timestamp()
-        if st.button('Watched'):
-            st.session_state.clicked_on_item = True
-            load_next_content_item()
-        else:
-            st.session_state.clicked_on_item = False
-        st.button('Next item', on_click=load_next_content_item)
-        st.text_input('Change the tune: ', value='', key='user_feedback')
-        if 'user_feedback' in st.session_state.keys():
-            youtube_recommendations.chat_memory.add_user_message(st.session_state.user_feedback)
+if len(st.session_state.recommended_videos) > 0:
+    st.session_state.content_item = st.session_state.recommended_videos.pop()
+    st.session_state.last_youtube_video = st.session_state.content_item['title']
+    youtube_recommendations.chat_memory.add_ai_message(st.session_state.content_item['title'])
+    st.video(f'https://www.youtube.com/watch?v={st.session_state.content_item["content_id"]}')
+    st.session_state.interaction_start_time = dt.now().timestamp()
+    if st.button('Watched', on_click=load_next_content_item):
+        st.session_state.clicked_on_item = True
     else:
-        st.button('Refresh', on_click=st.experimental_rerun())
+        st.session_state.clicked_on_item = False
+    st.button('Next item', on_click=load_next_content_item)
+    st.text_input('Change the tune: ', value='', key='user_feedback', on_change=load_next_content_item)
+    if 'user_feedback' in st.session_state.keys():
+        youtube_recommendations.chat_memory.add_user_message(st.session_state.user_feedback)
+else:
+    st.button('Refresh', on_click=load_next_content_item)
+
+st.write(st.session_state)
