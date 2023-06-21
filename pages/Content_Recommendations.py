@@ -1,14 +1,12 @@
 import os
 import json
 import redis
-import numpy as np
 import streamlit as st
 
 import googleapiclient.discovery
 import googleapiclient.errors
 
 from datetime import datetime as dt
-
 from google.oauth2 import service_account
 
 from langchain.prompts import (
@@ -53,17 +51,17 @@ def init_contentdb_connection():
 
 contentdb = init_contentdb_connection()
 mood_matrix = {
-    'anger': 'Surprised',
-    'joy': 'Excited',
-    'fear': 'Sad',
-    'sadness': 'Happy',
-    'love': 'Surprised'
+    'anger': 'surprised',
+    'joy': 'excited',
+    'fear': 'sad',
+    'sadness': 'happy',
+    'love': 'surprised'
 }
 
 
 @st.cache_resource
 def get_youtube_recommendation_memory():
-    user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=2)
+    user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=4)
     return user_conversation_memory
 
 
@@ -116,29 +114,30 @@ chat_history = get_chat_history()
 conversation_ending = parse_chat_message(chat_history)
 
 mood = st.selectbox(
-    'Emotion',
-    ['Surprised', 'Sad', 'Happy', 'Excited', 'Angry', 'Afraid'],
+    'Target mood',
+    ['surprised', 'sad', 'happy', 'excited', 'angry', 'afraid'],
 )
 current_mood = st.session_state.user_emotion if 'user_emotion' in st.session_state.keys() else mood
 
 fitness_level = st.selectbox(
     'Fitness level',
-    ['Neutral', 'Tired', 'Ready to go']
+    ['neutral', 'tired', 'ready to go']
 )
 
 mental_energy = st.selectbox(
     'Mental energy',
-    ['Neutral', 'Depleted', 'Fully charged']
+    ['neutral', 'depleted', 'fully charged']
 )
 
 motion_state = st.selectbox(
     'Motion state',
-    ['Sitting down', 'Lying down', 'Seated for a long time', 'Just got up', 'Walking', 'Running']
+    ['sitting down', 'lying down', 'seated for a long time', 'just got up', 'standing', 'walking', 'running']
 )
 
 style = st.session_state.conversational_style if 'conversational_style' in st.session_state else 'exciting'
 
 
+@st.cache_data
 def search_youtube(generated_query):
     st.session_state.interaction_start_time = dt.now().timestamp()
     query = generated_query.split('\n')[-1].replace('For example:', '') \
@@ -151,8 +150,8 @@ def search_youtube(generated_query):
     return request.execute().get('items')
 
 
-def generate_youtube_query(style_, mood_, energy_, fitness_, motion_, interests_, conversation_ending_):
-    current_video = st.session_state.current_youtube_video if 'current_youtube_video' in st.session_state.keys() else ''
+def generate_youtube_query(style_, mood_, energy_, fitness_, motion_, interests_, text):
+    previous_video = st.session_state.last_youtube_video if 'last_youtube_video' in st.session_state.keys() else ''
     youtube_query_prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template_file(
             template_file=os.path.join(file_path, '../prompts/content/youtube.yaml'),
@@ -167,15 +166,16 @@ def generate_youtube_query(style_, mood_, energy_, fitness_, motion_, interests_
             fitness_level=fitness_,
             motion_state=motion_,
             channel_interests=interests_,
-            current_video=current_video
+            current_video=previous_video
         ),
         MessagesPlaceholder(variable_name='history'),
         HumanMessagePromptTemplate.from_template('{input}')
     ])
     youtube_chatrecs = ConversationChain(memory=youtube_recommendations, prompt=youtube_query_prompt, llm=llm)
-    return youtube_chatrecs.predict(input=conversation_ending_)
+    return youtube_chatrecs.predict(input=text)
 
 
+@st.cache_data
 def parse_youtube_video_search_results(youtube_search_results):
     content_items = []
     for res in youtube_search_results:
@@ -190,8 +190,9 @@ def parse_youtube_video_search_results(youtube_search_results):
 
 
 user_content_history = get_user_content_history_titles(username)
+query_text = conversation_ending if 'user_feedback' not in st.session_state.keys() else st.session_state.user_feedback
 youtube_search_query = generate_youtube_query(
-   style, current_mood, mental_energy, fitness_level, motion_state, user_content_history, conversation_ending
+   style, current_mood, mental_energy, fitness_level, motion_state, user_content_history, query_text
 )
 st.write(youtube_search_query)
 youtube_videos = search_youtube(youtube_search_query)
@@ -229,13 +230,16 @@ def load_next_content_item():
                 })
             )
             st.video(f'https://www.youtube.com/watch?v={content_item["content_id"]}')
-            st.session_state.current_youtube_video = first_video['title']
+            st.session_state.last_youtube_video = first_video['title']
 
+
+input_container = st.container()
 
 if st.button('Show me!'):
     if len(st.session_state.recommended_videos) > 0:
         first_video = st.session_state.recommended_videos.pop()
-        st.session_state.current_youtube_video = first_video['title']
+        st.session_state.last_youtube_video = first_video['title']
+        youtube_recommendations.chat_memory.add_ai_message(first_video['title'])
         st.video(f'https://www.youtube.com/watch?v={first_video["content_id"]}')
         st.session_state.interaction_start_time = dt.now().timestamp()
         if st.button('Watched'):
@@ -244,5 +248,8 @@ if st.button('Show me!'):
         else:
             st.session_state.clicked_on_item = False
         st.button('Next item', on_click=load_next_content_item)
+        st.text_input('Change the tune: ', value='', key='user_feedback')
+        if 'user_feedback' in st.session_state.keys():
+            youtube_recommendations.chat_memory.add_user_message(st.session_state.user_feedback)
     else:
         st.button('Refresh', on_click=st.experimental_rerun())

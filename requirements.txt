@@ -1,8 +1,8 @@
 google-auth-oauthlib==1.0.0
-google-api-python-client==2.88.0
+google-api-python-client==2.90.0
 google-search-results==2.4.2
-langchain==0.0.198
-numpy==1.24.3
+langchain==0.0.207
+numpy==1.25.0
 openai==0.27.8
 protobuf==3.20.3
 redis==4.5.5
@@ -11,6 +11,6 @@ streamlit-chat==0.0.2.2
 streamlit-extras==0.2.7
 torch==2.0.1
 sentencepiece==0.1.99
-transformers==4.30.1
+transformers==4.30.2
 watchdog==3.0.0
-weaviate-client==3.19.2
+weaviate-client==3.21.0

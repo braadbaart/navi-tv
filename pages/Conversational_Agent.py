@@ -5,7 +5,7 @@ import streamlit as st
 from streamlit_chat import message
 from streamlit_extras.colored_header import colored_header
 
-from transformers import AutoTokenizer, AutoModelWithLMHead
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -66,7 +66,7 @@ def get_memory():
 @st.cache_resource
 def load_emotion_recognition_model():
     tokenizer = AutoTokenizer.from_pretrained("mrm8488/t5-base-finetuned-emotion")
-    model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-emotion")
+    model = AutoModelForSeq2SeqLM.from_pretrained("mrm8488/t5-base-finetuned-emotion")
     return tokenizer, model
 
 
