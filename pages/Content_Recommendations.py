@@ -3,11 +3,8 @@ import json
 import redis
 import streamlit as st
 
-import googleapiclient.discovery
-import googleapiclient.errors
-
 from datetime import datetime as dt
-from google.oauth2 import service_account
+
 
 from langchain.prompts import (
     ChatPromptTemplate,
@@ -19,6 +16,8 @@ from langchain.chains import ConversationChain
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferWindowMemory, RedisChatMessageHistory
 from langchain.schema import messages_to_dict
+
+from app.content.youtube import build_youtube_api, search_youtube, parse_youtube_video_search_results
 
 
 file_path = os.path.dirname(__file__)
@@ -56,30 +55,18 @@ mood_matrix = {
 }
 
 
-@st.cache_resource
-def get_youtube_recommendation_memory():
+@st.cache_data
+def get_youtube_recommendation_memory(user):
     user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=4)
     return user_conversation_memory
 
 
 llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.7)
-youtube_recommendations = get_youtube_recommendation_memory()
-
-
-@st.cache_resource
-def build_youtube_api():
-    scopes = ["https://www.googleapis.com/auth/youtube.readonly"]
-    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
-    api_service_name = "youtube"
-    api_version = "v3"
-    absolute_path = os.path.dirname(__file__)
-    client_secrets_file = os.path.join(absolute_path, "../.streamlit/youtube-api.json")
-    credentials = service_account.Credentials.from_service_account_file(client_secrets_file, scopes=scopes)
-    return googleapiclient.discovery.build(api_service_name, api_version, credentials=credentials)
+youtube_recommendations = get_youtube_recommendation_memory(username)
 
 
 youtube = build_youtube_api()
-channels = ['youtube', 'spotify', 'tiktok']
+channels = ['youtube', 'spotify', 'tiktok', 'news']
 
 
 def get_user_content_history_titles(user, num_messages=100):
@@ -135,19 +122,6 @@ style = st.session_state.conversational_style if 'conversational_style' in st.se
 
 
 @st.cache_data
-def search_youtube(generated_query):
-    st.session_state.interaction_start_time = dt.now().timestamp()
-    query = generated_query.split('\n')[-1].replace('For example:', '') \
-        if len(generated_query.split('\n')) > 0 else generated_query
-    request = youtube.search().list(
-        part="snippet",
-        maxResults=10,
-        q=query
-    )
-    return request.execute().get('items')
-
-
-@st.cache_data
 def generate_youtube_query(style_, mood_, energy_, fitness_, motion_, interests_, text):
     previous_video = st.session_state.last_youtube_video if 'last_youtube_video' in st.session_state.keys() else ''
     youtube_query_prompt = ChatPromptTemplate.from_messages([
@@ -171,20 +145,6 @@ def generate_youtube_query(style_, mood_, energy_, fitness_, motion_, interests_
     ])
     youtube_chatrecs = ConversationChain(memory=youtube_recommendations, prompt=youtube_query_prompt, llm=llm)
     return youtube_chatrecs.predict(input=text)
-
-
-def parse_youtube_video_search_results(youtube_search_results):
-    content_items = []
-    for res in youtube_search_results:
-        if res['id']['kind'] == 'youtube#video':
-            content_items.append({
-                'content_type': 'youtube_video',
-                'content_id': res['id']['videoId'],
-                'title': res['snippet']['title'],
-                'creator': res['snippet']['channelTitle'],
-                'upload_date': res['snippet']['publishedAt']
-            })
-    return content_items
 
 
 user_content_history = get_user_content_history_titles(username)
