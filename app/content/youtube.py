@@ -13,16 +13,19 @@ def build_youtube_api():
     api_service_name = "youtube"
     api_version = "v3"
     absolute_path = os.path.dirname(__file__)
-    client_secrets_file = os.path.join(absolute_path, "../.streamlit/youtube-api.json")
+    client_secrets_file = os.path.join(absolute_path, "../../.streamlit/youtube-api.json")
     credentials = service_account.Credentials.from_service_account_file(client_secrets_file, scopes=scopes)
     return googleapiclient.discovery.build(api_service_name, api_version, credentials=credentials)
 
 
+youtube = build_youtube_api()
+
+
 @st.cache_data()
-def search_youtube(youtube_client, generated_query):
+def search_youtube(generated_query):
     query = generated_query.split('\n')[-1].replace('For example:', '') \
         if len(generated_query.split('\n')) > 0 else generated_query
-    request = youtube_client.search().list(
+    request = youtube.search().list(
         part="snippet",
         maxResults=5,
         q=query

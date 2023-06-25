@@ -17,7 +17,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferWindowMemory, RedisChatMessageHistory
 from langchain.schema import messages_to_dict
 
-from app.content.youtube import build_youtube_api, search_youtube, parse_youtube_video_search_results
+from app.content.youtube import search_youtube, parse_youtube_video_search_results
 
 
 file_path = os.path.dirname(__file__)
@@ -65,7 +65,6 @@ llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperatur
 youtube_recommendations = get_youtube_recommendation_memory(username)
 
 
-youtube = build_youtube_api()
 channels = ['youtube', 'spotify', 'tiktok', 'news']
 
 
@@ -187,14 +186,18 @@ def load_next_content_item():
                     'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
                 })
             )
-            st.video(f'https://www.youtube.com/watch?v={st.session_state.content_item["content_id"]}')
             st.session_state.last_youtube_video = st.session_state.content_item['title']
 
 
+def run_new_query():
+    
+
+
 if len(st.session_state.recommended_videos) > 0:
-    st.session_state.content_item = st.session_state.recommended_videos.pop()
-    st.session_state.last_youtube_video = st.session_state.content_item['title']
-    youtube_recommendations.chat_memory.add_ai_message(st.session_state.content_item['title'])
+    if 'content_item' not in st.session_state.keys():
+        st.session_state.content_item = st.session_state.recommended_videos.pop()
+        st.session_state.last_youtube_video = st.session_state.content_item['title']
+        youtube_recommendations.chat_memory.add_ai_message(st.session_state.content_item['title'])
     st.video(f'https://www.youtube.com/watch?v={st.session_state.content_item["content_id"]}')
     st.session_state.interaction_start_time = dt.now().timestamp()
     if st.button('Watched', on_click=load_next_content_item):
