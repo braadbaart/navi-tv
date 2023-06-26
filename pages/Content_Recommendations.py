@@ -189,10 +189,6 @@ def load_next_content_item():
             st.session_state.last_youtube_video = st.session_state.content_item['title']
 
 
-def run_new_query():
-    
-
-
 if len(st.session_state.recommended_videos) > 0:
     if 'content_item' not in st.session_state.keys():
         st.session_state.content_item = st.session_state.recommended_videos.pop()
