@@ -4,6 +4,18 @@ import googleapiclient.discovery
 import googleapiclient.errors
 
 from google.oauth2 import service_account
+from langchain.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate
+)
+from langchain.chains import ConversationChain
+
+from app.user_interactions import mood_matrix
+
+
+file_path = os.path.dirname(__file__)
 
 
 @st.cache_resource
@@ -33,6 +45,32 @@ def search_youtube(generated_query):
     return request.execute().get('items')
 
 
+@st.cache_data
+def generate_youtube_query(llm, memory, style_, mood_, energy_, fitness_, motion_, interests_, text):
+    previous_video = st.session_state.last_youtube_video if 'last_youtube_video' in st.session_state.keys() else ''
+    youtube_query_prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template_file(
+            template_file=os.path.join(file_path, '../prompts/content/youtube.yaml'),
+            input_variables=[
+                'style', 'target_mood', 'mental_energy', 'fitness_level',
+                'motion_state', 'channel_interests', 'current_video'
+            ]
+        ).format(
+            style=style_,
+            target_mood=mood_matrix.get(mood_),
+            mental_energy=energy_,
+            fitness_level=fitness_,
+            motion_state=motion_,
+            channel_interests=interests_,
+            current_video=previous_video
+        ),
+        MessagesPlaceholder(variable_name='history'),
+        HumanMessagePromptTemplate.from_template('{input}')
+    ])
+    youtube_chatrecs = ConversationChain(memory=memory, prompt=youtube_query_prompt, llm=llm)
+    return youtube_chatrecs.predict(input=text)
+
+
 def parse_youtube_video_search_results(youtube_search_results):
     content_items = []
     for res in youtube_search_results:
@@ -45,3 +83,14 @@ def parse_youtube_video_search_results(youtube_search_results):
                 'upload_date': res['snippet']['publishedAt']
             })
     return content_items
+
+
+def recommend_from_youtube(
+        llm, memory, user_content_history, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+):
+    youtube_search_query = generate_youtube_query(
+       llm, memory, style, current_mood, mental_energy, fitness_level, motion_state, user_content_history, query_text
+    )
+    st.write(youtube_search_query)
+    youtube_videos = search_youtube(youtube_search_query)
+    return parse_youtube_video_search_results(youtube_videos)

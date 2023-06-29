@@ -3,18 +3,26 @@ import spotipy
 import streamlit as st
 
 
-def build_spotify_client(file_path):
+file_path = os.path.dirname(__file__)
+
+
+@st.cache_resource
+def build_spotify_client(spotify_cache):
     return spotipy.Spotify(
         auth_manager=spotipy.SpotifyOAuth(
             client_id=st.secrets['spotify']['client_id'],
             client_secret=st.secrets['spotify']['client_secret'],
             redirect_uri=st.secrets['spotify']['redirect_uri'],
             scope='user-library-read,playlist-modify-public,playlist-modify-private',
-            cache_path=os.path.join(file_path, 'spotify_cache.json')
+            cache_path=os.path.join(spotify_cache, 'spotify_cache.json')
         )
     )
 
 
+spotify = build_spotify_client(file_path)
+
+
+@st.cache_data
 def search_spotify(spotify, query):
     return spotify.search(query, limit=1, type='track')
 
@@ -31,4 +39,15 @@ def display_spotify_track_in_app(spotify, track_uri):
     st.image(track['album']['images'][0]['url'])
     st.write(track['external_urls']['spotify'])
     st.write(track['preview_url'])
+
+
+def recommend_from_spotify(
+    llm, memory, user_content_history, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+):
+    results = search_spotify(spotify, query_text)
+    track_uri = parse_spotify_search_results(results)
+    if track_uri is None:
+        return None
+    display_spotify_track_in_app(spotify, track_uri)
+    return track_uri
 

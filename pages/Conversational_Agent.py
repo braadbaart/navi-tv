@@ -46,7 +46,7 @@ convdb = init_conversationdb_connection()
 
 prompt = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template_file(
-        template_file=os.path.join(file_path, '../prompts/agent/style.yaml'),
+        template_file=os.path.join(file_path, '../app/prompts/agent/style.yaml'),
         input_variables=['conversational_style', 'agent_interests']
     ).format(
         conversational_style=conversational_style,

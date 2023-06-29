@@ -1,27 +1,24 @@
 import os
 import json
 import redis
+import numpy as np
 import streamlit as st
 
 from datetime import datetime as dt
 
-
-from langchain.prompts import (
-    ChatPromptTemplate,
-    MessagesPlaceholder,
-    SystemMessagePromptTemplate,
-    HumanMessagePromptTemplate
-)
-from langchain.chains import ConversationChain
 from langchain.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferWindowMemory, RedisChatMessageHistory
 from langchain.schema import messages_to_dict
 
-from app.content.youtube import search_youtube, parse_youtube_video_search_results
+from app.content.youtube import recommend_from_youtube
+from app.content.spotify import recommend_from_spotify
+from app.content.tiktok import recommend_from_tiktok
+from app.content.newsapi import recommend_from_newsapi
+from app.content.wikipedia import recommend_from_wikipedia
 
 
 file_path = os.path.dirname(__file__)
-username = 'grumpy_old_fool'
+st.session_state.username = 'grumpy_old_fool'
 
 
 @st.cache_resource
@@ -46,23 +43,16 @@ def init_contentdb_connection():
 
 
 contentdb = init_contentdb_connection()
-mood_matrix = {
-    'anger': 'surprised',
-    'joy': 'excited',
-    'fear': 'sad',
-    'sadness': 'happy',
-    'love': 'surprised'
-}
 
 
 @st.cache_data
-def get_youtube_recommendation_memory(user):
+def get_recommendation_memory(user):
     user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=4)
     return user_conversation_memory
 
 
 llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.7)
-youtube_recommendations = get_youtube_recommendation_memory(username)
+content_memory = get_recommendation_memory(st.session_state.username)
 
 
 channels = ['youtube', 'spotify', 'tiktok', 'news']
@@ -79,7 +69,7 @@ def get_user_content_history_titles(user, num_messages=100):
 
 
 def get_chat_history():
-    return RedisChatMessageHistory(session_id=username, url='redis://localhost:6379/1', key_prefix=':conv').messages
+    return RedisChatMessageHistory(session_id=st.session_state.username, url='redis://localhost:6379/1', key_prefix=':conv').messages
 
 
 def parse_chat_message(messages):
@@ -120,51 +110,31 @@ motion_state = st.selectbox(
 style = st.session_state.conversational_style if 'conversational_style' in st.session_state else 'exciting'
 
 
-@st.cache_data
-def generate_youtube_query(style_, mood_, energy_, fitness_, motion_, interests_, text):
-    previous_video = st.session_state.last_youtube_video if 'last_youtube_video' in st.session_state.keys() else ''
-    youtube_query_prompt = ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template_file(
-            template_file=os.path.join(file_path, '../prompts/content/youtube.yaml'),
-            input_variables=[
-                'style', 'target_mood', 'mental_energy', 'fitness_level',
-                'motion_state', 'channel_interests', 'current_video'
-            ]
-        ).format(
-            style=style_,
-            target_mood=mood_matrix.get(mood_),
-            mental_energy=energy_,
-            fitness_level=fitness_,
-            motion_state=motion_,
-            channel_interests=interests_,
-            current_video=previous_video
-        ),
-        MessagesPlaceholder(variable_name='history'),
-        HumanMessagePromptTemplate.from_template('{input}')
-    ])
-    youtube_chatrecs = ConversationChain(memory=youtube_recommendations, prompt=youtube_query_prompt, llm=llm)
-    return youtube_chatrecs.predict(input=text)
+def display_content(content_item):
+    if content_item['channel'] == 'youtube':
+        st.video(f'https://www.youtube.com/watch?v={content_item["content_id"]}')
+    elif content_item['channel'] == 'spotify':
+        st.audio(f'https://open.spotify.com/track/{content_item["content_id"]}')
+    elif content_item['channel'] == 'tiktok':
+        st.video(f'https://www.tiktok.com/@{content_item["content_id"]}')
+    elif content_item['channel'] == 'news':
+        st.write(f'{content_item["content_title"]}')
+        st.write(f'{content_item["content_excerpt"]}')
+        st.write(f'{content_item["content_url"]}')
+    else:
+        st.write(f'{content_item["content_title"]}')
+        st.write(f'{content_item["content_excerpt"]}')
+        st.write(f'{content_item["content_url"]}')
 
 
-user_content_history = get_user_content_history_titles(username)
-query_text = conversation_ending if 'user_feedback' not in st.session_state.keys() else st.session_state.user_feedback
-youtube_search_query = generate_youtube_query(
-   style, current_mood, mental_energy, fitness_level, motion_state, user_content_history, query_text
-)
-st.write(youtube_search_query)
-youtube_videos = search_youtube(youtube_search_query)
-st.session_state.recommended_videos = parse_youtube_video_search_results(youtube_videos)
-
-
-def load_next_content_item():
-    if 'recommended_videos' in st.session_state:
-        if len(st.session_state.recommended_videos) > 0:
-            st.session_state.content_item = st.session_state.recommended_videos.pop()
+def load_next_query_result():
+    if 'recommended_items' in st.session_state:
+        if len(st.session_state.recommended_items) > 0:
             contentdb.hset(
-                username,
+                st.session_state.username,
                 dt.now().timestamp(),
                 json.dumps({
-                    'channel': 'youtube',
+                    'channel': st.session_state.content_item['channel'],
                     'mood': mood,
                     'fitness_level': fitness_level,
                     'context': {
@@ -175,7 +145,7 @@ def load_next_content_item():
                     },
                     'content_id': st.session_state.content_item['content_id'],
                     'content_metadata': {
-                        'type': 'youtube_video',
+                        'source': st.session_state.content_item['channel'],
                         'title': st.session_state.content_item['title'],
                         'creator': st.session_state.content_item['creator'],
                         'upload_date': st.session_state.content_item['upload_date']
@@ -186,25 +156,85 @@ def load_next_content_item():
                     'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
                 })
             )
-            st.session_state.last_youtube_video = st.session_state.content_item['title']
+            st.session_state.last_recommended_item = st.session_state.content_item['title']
+            st.session_state.content_item = st.session_state.recommended_items.pop()
+            
+            
+def run_new_query():
+    st.session_state.last_recommended_item = st.session_state.content_item['title']
+    st.session_state.current_channel = np.random.choice(channels)
+    query_text = \
+        st.session_state.user_feedback \
+            if 'user_feedback' in st.session_state.keys() else st.session_state.conversation_ending
+    if st.session_state.current_channel == 'youtube':
+        st.session_state.recommended_items = recommend_from_youtube(
+            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+        )
+    elif st.session_state.current_channel == 'spotify':
+        st.session_state.recommended_items = recommend_from_spotify(
+            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+        )
+    elif st.session_state.current_channel == 'tiktok':
+        st.session_state.recommended_items = recommend_from_tiktok(
+            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+        )
+    elif st.session_state.current_channel == 'news':
+        st.session_state.recommended_items = recommend_from_newsapi(
+            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+        )
+    else:
+        st.session_state.recommended_items = recommend_from_wikipedia(
+            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+        )
 
-
-if len(st.session_state.recommended_videos) > 0:
-    if 'content_item' not in st.session_state.keys():
-        st.session_state.content_item = st.session_state.recommended_videos.pop()
+    if 'recommended_items' in st.session_state and len(st.session_state.recommended_items) > 0:
+        st.session_state.content_item = st.session_state.recommended_items.pop()
+        contentdb.hset(
+            st.session_state.username,
+            dt.now().timestamp(),
+            json.dumps({
+                'channel': 'youtube',
+                'mood': mood,
+                'fitness_level': fitness_level,
+                'context': {
+                    'day_of_week': dt.now().isoweekday(),
+                    'hour_of_day': dt.now().strftime('%H'),
+                    'motion_state': motion_state,
+                    'mental_energy': mental_energy
+                },
+                'content_id': st.session_state.content_item['content_id'],
+                'content_metadata': {
+                    'type': 'youtube_video',
+                    'title': st.session_state.content_item['title'],
+                    'creator': st.session_state.content_item['creator'],
+                    'upload_date': st.session_state.content_item['upload_date']
+                },
+                'engagement': {
+                    'clicked_on_item': st.session_state.clicked_on_item
+                },
+                'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
+            })
+        )
         st.session_state.last_youtube_video = st.session_state.content_item['title']
-        youtube_recommendations.chat_memory.add_ai_message(st.session_state.content_item['title'])
-    st.video(f'https://www.youtube.com/watch?v={st.session_state.content_item["content_id"]}')
+        st.session_state.content_item = st.session_state.recommended_items.pop()
+
+
+if len(st.session_state.recommended_items) > 0:
+    st.session_state.last_recommended_item = st.session_state.content_item['title']
+    next_recommended_content_item = st.session_state.recommended_items.pop()
+    st.session_state.content_item = next_recommended_content_item
+    content_memory.chat_memory.add_ai_message(next_recommended_content_item['title'])
+    display_content(next_recommended_content_item)
     st.session_state.interaction_start_time = dt.now().timestamp()
-    if st.button('Watched', on_click=load_next_content_item):
+    if st.button('Interacted', on_click=load_next_query_result()):
         st.session_state.clicked_on_item = True
     else:
         st.session_state.clicked_on_item = False
-    st.button('Next item', on_click=load_next_content_item)
-    st.text_input('Change the tune: ', value='', key='user_feedback', on_change=load_next_content_item)
+    st.button('Next item', on_click=load_next_query_result())
+    st.text_input('Change the tune: ', value='', key='user_feedback', on_change=run_new_query)
     if 'user_feedback' in st.session_state.keys():
-        youtube_recommendations.chat_memory.add_user_message(st.session_state.user_feedback)
+        content_memory.chat_memory.add_user_message(st.session_state.user_feedback)
 else:
-    st.button('Refresh', on_click=load_next_content_item)
+    st.button('Refresh', on_click=run_new_query)
 
 st.write(st.session_state)
