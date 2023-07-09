@@ -20,7 +20,7 @@ from langchain.schema import messages_to_dict
 
 st.set_page_config(page_title='Navi conversational AI agent demo')
 st.session_state.waiting_for_user_input = True
-st.write(st.session_state)
+
 username = 'grumpy_old_fool'
 
 file_path = os.path.dirname(__file__)
@@ -36,14 +36,6 @@ def init_userdb_connection():
 userdb = init_userdb_connection()
 
 
-@st.cache_resource
-def init_conversationdb_connection():
-    return redis.StrictRedis(host='localhost', port=st.secrets['redis']['port'], db=1)
-
-
-convdb = init_conversationdb_connection()
-
-
 prompt = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template_file(
         template_file=os.path.join(file_path, '../app/prompts/agent/style.yaml'),
@@ -55,6 +47,14 @@ prompt = ChatPromptTemplate.from_messages([
     MessagesPlaceholder(variable_name='history'),
     HumanMessagePromptTemplate.from_template('{input}')
 ])
+
+
+@st.cache_resource
+def initialise_chat_log():
+    st.session_state.chat_log = []
+
+
+initialise_chat_log()
 
 
 @st.cache_resource
@@ -116,6 +116,8 @@ def generate_response(user_prompt):
     agent_response = conversation.predict(input=user_prompt)
     memory.chat_memory.add_ai_message(agent_response)
     history.add_ai_message(agent_response)
+    st.session_state.chat_log.append({'type': 'ai', 'message': agent_response})
+    st.session_state.waiting_for_user_input = True
 
 
 with input_container:
@@ -123,19 +125,24 @@ with input_container:
     if st.session_state.user_message:
         memory.chat_memory.add_user_message(st.session_state.user_message)
         history.add_user_message(st.session_state.user_message)
-        generate_response(st.session_state.user_message)
-        st.session_state.chat_log = messages_to_dict(history.messages)
         st.session_state.user_emotion = detect_emotion(st.session_state.user_message)
+        st.session_state.chat_log.append({
+            'type': 'human',
+            'message': st.session_state.user_message,
+            'emotion': st.session_state.user_emotion
+        })
+        generate_response(st.session_state.user_message)
 
 
 with dialogue_container:
-    chat_history = messages_to_dict(history.messages)
+    current_chat = st.session_state.chat_log
     if st.session_state.waiting_for_user_input:
-        for i in range(len(chat_history)):
-            if chat_history[i]['type'] == 'ai':
-                message(chat_history[i]['data']['content'], avatar_style='bottts', seed=3, key=str(i))
+        for i in range(len(current_chat)):
+            if current_chat[i]['type'] == 'ai':
+                message(current_chat[i]['message'], avatar_style='bottts', seed=3, key=str(i))
             else:
                 message(
-                    chat_history[i]['data']['content'], avatar_style='personas', seed=4,
-                    is_user=True, key=str(i) + '_user'
+                    current_chat[i]['message'], avatar_style='personas', seed=4, is_user=True, key=str(i) + '_user'
                 )
+
+st.write(st.session_state)

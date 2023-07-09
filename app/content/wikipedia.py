@@ -13,7 +13,7 @@ def search_wikipedia(wikipedia, query):
 
 
 def recommend_from_wikipedia(
-        llm, memory, user_content_history, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+        llm, memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
 ):
     wikipedia = build_wikipedia_client()
     results = search_wikipedia(wikipedia, query_text)

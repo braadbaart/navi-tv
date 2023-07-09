@@ -7,19 +7,28 @@ services:
       - '6379:6379'
     volumes:
       - data:/data
-#  weaviate:
-#    image: semitechnologies/weaviate:1.19.7
-#    ports:
-#    - '8080:8080'
-#    restart: always
-#    environment:
-#      QUERY_DEFAULTS_LIMIT: 25
-#      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
-#      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
-#      DEFAULT_VECTORIZER_MODULE: 'none'
-#      CLUSTER_HOSTNAME: 'node1'
-#    volumes:
-#      - /var/weaviate:/var/lib/weaviate
+  weaviate:
+    image: semitechnologies/weaviate:1.20.0
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - '8080'
+      - --scheme
+      - http
+    ports:
+    - '5051:8080'
+    restart: on-failure
+    environment:
+      OPENAI_APIKEY: $OPENAI_APIKEY
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-openai'
+      ENABLE_MODULES: 'text2vec-openai'
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - /var/weaviate:/var/lib/weaviate
 #  streamlit:
 #    image: navi-demo
 #    build:

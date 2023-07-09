@@ -14,7 +14,7 @@ def search_tiktok_video(tiktok, search_term, creator):
 
 
 def recommend_from_tiktok(
-        llm, memory, user_content_history, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+        llm, memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
 ):
     tiktok = build_tiktok_client()
     results = search_tiktok_video(tiktok, query_text, creator='@david')

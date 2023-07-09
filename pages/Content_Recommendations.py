@@ -130,6 +130,8 @@ def display_content(content_item):
 def load_next_query_result():
     if 'recommended_items' in st.session_state:
         if len(st.session_state.recommended_items) > 0:
+            clicked_on_item = \
+                False if 'clicked_on_item' not in st.session_state.keys() else st.session_state.clicked_on_item
             contentdb.hset(
                 st.session_state.username,
                 dt.now().timestamp(),
@@ -151,21 +153,30 @@ def load_next_query_result():
                         'upload_date': st.session_state.content_item['upload_date']
                     },
                     'engagement': {
-                        'clicked_on_item': st.session_state.clicked_on_item
+                        'clicked_on_item': clicked_on_item
                     },
                     'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
                 })
             )
-            st.session_state.last_recommended_item = st.session_state.content_item['title']
+            if 'content_item' in st.session_state.keys():
+                st.session_state.last_recommended_item = st.session_state.content_item['title']
             st.session_state.content_item = st.session_state.recommended_items.pop()
-            
-            
+
+
+def resolve_query_text():
+    if 'user_feedback' in st.session_state.keys():
+        return st.session_state.user_feedback
+    elif 'conversation_ending' in st.session_state.keys():
+        return st.session_state.conversation_ending
+    else:
+        return ''
+
+
 def run_new_query():
-    st.session_state.last_recommended_item = st.session_state.content_item['title']
-    st.session_state.current_channel = np.random.choice(channels)
-    query_text = \
-        st.session_state.user_feedback \
-            if 'user_feedback' in st.session_state.keys() else st.session_state.conversation_ending
+    if 'content_item' in st.session_state.keys():
+        st.session_state.last_recommended_item = st.session_state.content_item['title']
+    st.session_state.current_channel = 'youtube' #np.random.choice(channels)
+    query_text = resolve_query_text()
     if st.session_state.current_channel == 'youtube':
         st.session_state.recommended_items = recommend_from_youtube(
             llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
@@ -189,6 +200,8 @@ def run_new_query():
 
     if 'recommended_items' in st.session_state and len(st.session_state.recommended_items) > 0:
         st.session_state.content_item = st.session_state.recommended_items.pop()
+        clicked_on_item = \
+            False if 'clicked_on_item' not in st.session_state.keys() else st.session_state.clicked_on_item
         contentdb.hset(
             st.session_state.username,
             dt.now().timestamp(),
@@ -210,7 +223,7 @@ def run_new_query():
                     'upload_date': st.session_state.content_item['upload_date']
                 },
                 'engagement': {
-                    'clicked_on_item': st.session_state.clicked_on_item
+                    'clicked_on_item': clicked_on_item
                 },
                 'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
             })
@@ -219,8 +232,9 @@ def run_new_query():
         st.session_state.content_item = st.session_state.recommended_items.pop()
 
 
-if len(st.session_state.recommended_items) > 0:
-    st.session_state.last_recommended_item = st.session_state.content_item['title']
+if 'recommended_items' in st.session_state.keys() and len(st.session_state.recommended_items) > 0:
+    if 'content_item' in st.session_state.keys():
+        st.session_state.last_recommended_item = st.session_state.content_item['title']
     next_recommended_content_item = st.session_state.recommended_items.pop()
     st.session_state.content_item = next_recommended_content_item
     content_memory.chat_memory.add_ai_message(next_recommended_content_item['title'])

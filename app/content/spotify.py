@@ -42,7 +42,7 @@ def display_spotify_track_in_app(spotify, track_uri):
 
 
 def recommend_from_spotify(
-    llm, memory, user_content_history, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+    llm, memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
 ):
     results = search_spotify(spotify, query_text)
     track_uri = parse_spotify_search_results(results)
