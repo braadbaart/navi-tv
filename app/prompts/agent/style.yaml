@@ -1,5 +1,0 @@
-_type: prompt
-input_variables:
-    ["conversational_style", "agent_interests"]
-template:
-    The following is a conversation between a human and an AI. The AI has a {conversational_style} conversational conversational_style, and is very interested in {agent_interests}. If the AI does not know the answer to a question, it will refer back to a previous step in the dialogue.

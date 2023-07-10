@@ -1,5 +1,6 @@
 import os
 import redis
+import weaviate
 import streamlit as st
 
 from streamlit_chat import message
@@ -13,10 +14,13 @@ from langchain.prompts import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate
 )
-from langchain.chains import ConversationChain
+
 from langchain.chat_models import ChatOpenAI
-from langchain.memory import ConversationBufferWindowMemory, RedisChatMessageHistory
+from langchain.memory import RedisChatMessageHistory, VectorStoreRetrieverMemory
 from langchain.schema import messages_to_dict
+from langchain.chains import ConversationChain
+from langchain.vectorstores.weaviate import Weaviate
+
 
 st.set_page_config(page_title='Navi conversational AI agent demo')
 st.session_state.waiting_for_user_input = True
@@ -36,19 +40,6 @@ def init_userdb_connection():
 userdb = init_userdb_connection()
 
 
-prompt = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template_file(
-        template_file=os.path.join(file_path, '../app/prompts/agent/style.yaml'),
-        input_variables=['conversational_style', 'agent_interests']
-    ).format(
-        conversational_style=conversational_style,
-        agent_interests=interests
-    ),
-    MessagesPlaceholder(variable_name='history'),
-    HumanMessagePromptTemplate.from_template('{input}')
-])
-
-
 @st.cache_resource
 def initialise_chat_log():
     st.session_state.chat_log = []
@@ -57,10 +48,23 @@ def initialise_chat_log():
 initialise_chat_log()
 
 
+# @st.cache_resource
+# def get_memory(vectorstore):
+#     # user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=10)
+#     # return user_conversation_memory
+
+
 @st.cache_resource
-def get_memory():
-    user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=10)
-    return user_conversation_memory
+def get_vector_store_memory():
+    weaviate_client = weaviate.Client(
+            url="http://localhost:5051",
+            additional_headers={
+                "X-OpenAI-Api-Key": st.secrets['llms']['openai_api_key']
+            }
+        )
+    vector_store = Weaviate(weaviate_client, 'conversations', username)
+    retriever = vector_store.as_retriever(search_kwargs=dict(k=1))
+    return VectorStoreRetrieverMemory(retriever=retriever)
 
 
 @st.cache_resource
@@ -85,8 +89,21 @@ def get_history():
     return RedisChatMessageHistory(session_id=username, url='redis://localhost:6379/1', key_prefix=':conv')
 
 
+prompt = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template_file(
+        template_file=os.path.join(file_path, '../app/prompts/agent/conversational.yaml'),
+        input_variables=['conversational_style', 'user_interests']
+    ).format(
+        conversational_style=conversational_style,
+        user_interests=interests,
+    ),
+    MessagesPlaceholder(variable_name='history'),
+    HumanMessagePromptTemplate.from_template('{input}')
+])
+
+
 llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.8)
-memory = get_memory()
+memory = get_vector_store_memory()
 history = get_history()
 conversation = ConversationChain(memory=memory, prompt=prompt, llm=llm)
 
@@ -113,8 +130,14 @@ def process_user_input():
 
 
 def generate_response(user_prompt):
-    agent_response = conversation.predict(input=user_prompt)
-    memory.chat_memory.add_ai_message(agent_response)
+    salient_memories = memory.load_memory_variables({"prompt": user_prompt})["history"]
+    st.write(salient_memories)
+    message_with_context = f"If the AI does not know the answer to a question, it will refer back " \
+                           f"to a relevant pieces of a previous conversation: \n{salient_memories}. " \
+                           f"You don't need to use these pieces of information if they're not relevant. " \
+                           f"Current conversation: \nHuman {user_prompt}\n AI:\n"
+    agent_response = conversation.predict(input=message_with_context)
+    memory.save_context({"input": user_prompt}, {"output": agent_response})
     history.add_ai_message(agent_response)
     st.session_state.chat_log.append({'type': 'ai', 'message': agent_response})
     st.session_state.waiting_for_user_input = True
@@ -123,7 +146,6 @@ def generate_response(user_prompt):
 with input_container:
     st.text_input('You: ', value='', key='chat_dialogue_box', on_change=process_user_input)
     if st.session_state.user_message:
-        memory.chat_memory.add_user_message(st.session_state.user_message)
         history.add_user_message(st.session_state.user_message)
         st.session_state.user_emotion = detect_emotion(st.session_state.user_message)
         st.session_state.chat_log.append({

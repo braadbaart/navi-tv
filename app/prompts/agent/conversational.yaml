@@ -1,0 +1,5 @@
+_type: prompt
+input_variables:
+    ["conversational_style", "user_interests"]
+template:
+    The following is a conversation between a human and an AI. The AI has a {conversational_style} conversational style, and knows the human is interested in {user_interests}.
