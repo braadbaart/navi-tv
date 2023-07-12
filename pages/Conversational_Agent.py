@@ -3,6 +3,7 @@ import redis
 import weaviate
 import streamlit as st
 
+from datetime import datetime
 from streamlit_chat import message
 from streamlit_extras.colored_header import colored_header
 
@@ -16,10 +17,11 @@ from langchain.prompts import (
 )
 
 from langchain.chat_models import ChatOpenAI
-from langchain.memory import RedisChatMessageHistory, VectorStoreRetrieverMemory
+from langchain.memory import RedisChatMessageHistory, ConversationBufferWindowMemory
 from langchain.schema import messages_to_dict
 from langchain.chains import ConversationChain
-from langchain.vectorstores.weaviate import Weaviate
+
+from app.data.weaviate import create_chat_schema, store_qa_pair, similarity_search
 
 
 st.set_page_config(page_title='Navi conversational AI agent demo')
@@ -30,6 +32,18 @@ username = 'grumpy_old_fool'
 file_path = os.path.dirname(__file__)
 conversational_style = st.session_state['conversational_style'] if 'conversational_style' in st.session_state else ''
 interests = ', '.join(st.session_state['interests']) if 'interests' in st.session_state else ''
+
+
+def get_datetime():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_timestamp():
+    return int(datetime.now().timestamp())
+
+
+if 'chat_session_start_time' not in st.session_state:
+    st.session_state.chat_session_start_time = get_datetime()
 
 
 @st.cache_resource
@@ -48,23 +62,31 @@ def initialise_chat_log():
 initialise_chat_log()
 
 
-# @st.cache_resource
-# def get_memory(vectorstore):
-#     # user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=10)
-#     # return user_conversation_memory
+@st.cache_resource
+def get_memory():
+    user_conversation_memory = ConversationBufferWindowMemory(return_messages=True, k=10)
+    return user_conversation_memory
 
 
 @st.cache_resource
-def get_vector_store_memory():
-    weaviate_client = weaviate.Client(
+def intialise_vector_db_schema():
+    create_chat_schema()
+
+
+intialise_vector_db_schema()
+
+
+@st.cache_resource
+def get_vector_store_client():
+    return weaviate.Client(
             url="http://localhost:5051",
             additional_headers={
                 "X-OpenAI-Api-Key": st.secrets['llms']['openai_api_key']
             }
         )
-    vector_store = Weaviate(weaviate_client, 'conversations', username)
-    retriever = vector_store.as_retriever(search_kwargs=dict(k=1))
-    return VectorStoreRetrieverMemory(retriever=retriever)
+
+
+vector_db = get_vector_store_client()
 
 
 @st.cache_resource
@@ -103,7 +125,7 @@ prompt = ChatPromptTemplate.from_messages([
 
 
 llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.8)
-memory = get_vector_store_memory()
+memory = get_memory()
 history = get_history()
 conversation = ConversationChain(memory=memory, prompt=prompt, llm=llm)
 
@@ -129,17 +151,30 @@ def process_user_input():
     st.session_state.chat_dialogue_box = ''
 
 
-def generate_response(user_prompt):
-    salient_memories = memory.load_memory_variables({"prompt": user_prompt})["history"]
-    st.write(salient_memories)
-    message_with_context = f"If the AI does not know the answer to a question, it will refer back " \
-                           f"to a relevant pieces of a previous conversation: \n{salient_memories}. " \
-                           f"You don't need to use these pieces of information if they're not relevant. " \
-                           f"Current conversation: \nHuman {user_prompt}\n AI:\n"
-    agent_response = conversation.predict(input=message_with_context)
-    memory.save_context({"input": user_prompt}, {"output": agent_response})
+def generate_response(user_prompt, user_prompt_dt):
+    if len(user_prompt) > 0 and len(st.session_state.chat_log) == 0:
+        chat_excerpt = similarity_search(vector_db, username, user_prompt, get_timestamp())
+    elif len(st.session_state.chat_log) > 0:
+        memory_trigger = ''
+        for line in st.session_state.chat_log[-3:]:
+            memory_trigger += line['message'] + '\n' if len(line['message']) < 200 else line['message'][0:200] + '\n'
+        memory_trigger += user_prompt
+        chat_excerpt = similarity_search(vector_db, username, memory_trigger, get_timestamp())
+    else:
+        chat_excerpt = None
+    if chat_excerpt:
+        agent_prompt = \
+            f"If the AI does not know the answer to a question, it will refer back " \
+            f"to a relevant pieces of a previous conversation: \n{chat_excerpt}. " \
+            f"You don't need to use these pieces of information if they're not relevant. " \
+            f"Current conversation: \nHuman {user_prompt}\n AI:\n"
+    else:
+        agent_prompt = f"Current conversation: \nHuman {user_prompt}\n AI:\n"
+    agent_response = conversation.predict(input=agent_prompt)
+    memory.chat_memory.add_ai_message(agent_response)
     history.add_ai_message(agent_response)
-    st.session_state.chat_log.append({'type': 'ai', 'message': agent_response})
+    st.session_state.chat_log.append({'type': 'ai', 'message': agent_response, 'time': get_datetime()})
+    store_qa_pair(vector_db, username, user_prompt, agent_response, user_prompt_dt)
     st.session_state.waiting_for_user_input = True
 
 
@@ -148,16 +183,23 @@ with input_container:
     if st.session_state.user_message:
         history.add_user_message(st.session_state.user_message)
         st.session_state.user_emotion = detect_emotion(st.session_state.user_message)
+        st.session_state.last_user_message_dt = get_datetime()
+        if 'chat_log' not in st.session_state.keys():
+            st.session_state.chat_log = []
         st.session_state.chat_log.append({
             'type': 'human',
             'message': st.session_state.user_message,
-            'emotion': st.session_state.user_emotion
+            'emotion': st.session_state.user_emotion,
+            'time': st.session_state.last_user_message_dt
         })
-        generate_response(st.session_state.user_message)
+        generate_response(st.session_state.user_message, st.session_state.last_user_message_dt)
 
 
 with dialogue_container:
-    current_chat = st.session_state.chat_log
+    if 'chat_log' not in st.session_state.keys():
+        current_chat = []
+    else:
+        current_chat = st.session_state.chat_log
     if st.session_state.waiting_for_user_input:
         for i in range(len(current_chat)):
             if current_chat[i]['type'] == 'ai':

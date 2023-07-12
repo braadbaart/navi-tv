@@ -120,20 +120,3 @@ st.write(f'You have selected the following conversational conversational_style: 
 st.write(f'We\'ve registered the following interests: {", ".join(user_interests)}.')
 st.write('We\'ll use this information to personalize your experience.')
 
-# Create the Weaviate schema
-class_obj = {
-    "class": "LangChain",
-    "vectorizer": "text2vec-openai",
-}
-
-client = weaviate.Client(
-    url="http://localhost:5051",
-    additional_headers={
-        "X-OpenAI-Api-Key": st.secrets['llms']['openai_api_key']
-    }
-)
-
-try:
-    client.schema.create_class(class_obj)
-except:
-    print("Weaviate schema class already exists")
