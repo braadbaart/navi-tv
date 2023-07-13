@@ -89,5 +89,6 @@ def recommend_from_spotify(
     spotify_query = generate_spotify_query(
         llm, memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
     )
+    st.write(spotify_query)
     search_results = search_spotify(spotify_query)
     return parse_spotify_search_results(search_results)

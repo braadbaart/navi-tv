@@ -80,5 +80,6 @@ def recommend_from_newsapi(
         subject = st.session_state.user_feedback
     else:
         subject = resolve_news_article_subject(mental_energy, fitness_level, motion_state)
+    st.write(f'**{topic}** {subject}')
     current_articles = search_newsapi(f'{topic} {subject} {query_text}')
     return parse_newsapi_response(current_articles)

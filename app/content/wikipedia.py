@@ -83,7 +83,6 @@ def recommend_from_wikipedia(
     wikipedia_query = generate_wikipedia_query(llm, memory, topic, query_text)
     st.write(wikipedia_query)
     search_results = search_wikipedia(wikipedia_query)
-    st.write(search_results)
     return parse_wikipedia_search_results(search_results)
 
 
