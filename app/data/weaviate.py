@@ -108,10 +108,10 @@ def store_qa_pair(client, username, user_prompt, agent_response, user_prompt_dt)
     )
 
 
-def similarity_search(client, username, user_prompt, timestamp, max_distance=0.3):
+def similarity_search(client, username, user_prompt, timestamp, max_distance=0.15):
     try:
         response = client.query\
-            .get('ChatQAPair', ['chat', 'timestamp'])\
+            .get('ChatQAPair', ['chat', 'timestamp', 'datetime'])\
             .with_where({
                 'path': ['username'],
                 'operator': 'Equal',
@@ -121,14 +121,18 @@ def similarity_search(client, username, user_prompt, timestamp, max_distance=0.3
             .with_limit(3) \
             .with_additional(['distance']) \
             .do()
-        query_results = response['data']['Get']['ChatQAPair']
+        query_results = sorted(response['data']['Get']['ChatQAPair'], key=lambda x: x['timestamp'])
         if len(query_results) > 0:
             prompt_input = ''
             for chat in query_results:
                 if (timestamp - chat['timestamp']) < (60 * 60 * 24 * 30) \
                         and chat['_additional']['distance'] < max_distance:
                     prompt_input += chat['chat'] + '\n'
-            return prompt_input
+            # make sure we don't hit the 4096 token limit for OpenAI's APIs
+            if len(prompt_input) > 1000:
+                return prompt_input[:1000]
+            else:
+                return prompt_input
         else:
             return None
     except ValueError:
