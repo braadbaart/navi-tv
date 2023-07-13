@@ -55,7 +55,7 @@ llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperatur
 content_memory = get_recommendation_memory(st.session_state.username)
 
 
-channels = ['spotify'] # ['youtube', 'spotify', 'news', 'wikipedia', 'tiktok']
+channels = ['wikipedia'] # ['youtube', 'spotify', 'news', 'wikipedia'] # ['tiktok', 'youtube', 'spotify', 'news', 'wikipedia']
 
 
 chat_history = get_chat_history()
@@ -99,6 +99,11 @@ def display_content(content_item):
     elif content_item['channel'] == 'news':
         st.write(f'{content_item["content_title"]}')
         st.write(f'{content_item["content_excerpt"]}')
+        st.write(f'{content_item["content_url"]}')
+    elif content_item['channel'] == 'wikipedia':
+        st.image(content_item['content_image'])
+        st.markdown(f'**{content_item["content_title"]}**')
+        st.markdown(f'{content_item["content_excerpt"]}')
         st.write(f'{content_item["content_url"]}')
     else:
         st.markdown(f'**{content_item["content_title"]}**')

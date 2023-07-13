@@ -2,4 +2,4 @@ _type: prompt
 input_variables:
     ["style", "target_mood", "mental_energy", "fitness_level", "motion_state", "current_item"]
 template:
-    Generate a single example song title with a {style} style. The song should be able to get someone who is mentally {mental_energy} and {motion_state} in a {target_mood} mood, with {fitness_level} energy levels. The title should be different from a song about {current_item}.
+    Generate a single example song title with a {style} style. The song should be able to get someone who is mentally {mental_energy} and {motion_state} in a {target_mood} mood, with {fitness_level} energy levels. The title should be different from a song about {current_item}. The song should be about

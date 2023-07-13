@@ -1,0 +1,5 @@
+_type: prompt
+input_variables:
+    ["topic", "current_item"]
+template:
+    Suggest some trivia categories about {topic}. The categories should not discuss {current_item}, but can include
