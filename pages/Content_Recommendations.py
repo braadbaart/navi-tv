@@ -7,8 +7,7 @@ import streamlit as st
 from datetime import datetime as dt
 
 from langchain.chat_models import ChatOpenAI
-from langchain.memory import ConversationBufferWindowMemory, RedisChatMessageHistory
-from langchain.schema import messages_to_dict
+from langchain.memory import ConversationBufferWindowMemory
 
 from app.content.youtube import recommend_from_youtube
 from app.content.spotify import recommend_from_spotify
@@ -16,6 +15,7 @@ from app.content.tiktok import recommend_from_tiktok
 from app.content.newsapi import recommend_from_newsapi
 from app.content.wikipedia import recommend_from_wikipedia
 
+from app.data.redis import get_chat_history, parse_chat_message
 
 file_path = os.path.dirname(__file__)
 st.session_state.username = 'grumpy_old_fool'
@@ -55,32 +55,7 @@ llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperatur
 content_memory = get_recommendation_memory(st.session_state.username)
 
 
-channels = ['youtube', 'spotify', 'tiktok', 'news']
-
-
-def get_user_content_history_titles(user, num_messages=100):
-    content_history = contentdb.hgetall(user)
-    titles = []
-    for k, v in content_history.items():
-        pc = json.loads(v)
-        if pc['engagement']['clicked_on_item']:
-            titles.append(f'{pc["content_metadata"]["title"]} ({pc["content_metadata"]["creator"]})')
-    return ' and '.join(titles[-num_messages:])
-
-
-def get_chat_history():
-    return RedisChatMessageHistory(session_id=st.session_state.username, url='redis://localhost:6379/1', key_prefix=':conv').messages
-
-
-def parse_chat_message(messages):
-    if len(messages) > 2:
-        decoded_user_messages = [m for m in messages_to_dict(messages)]
-        conversation_end = []
-        for message in decoded_user_messages[-2:]:
-            conversation_end.append(f'{message["type"]}: {message["data"]["content"]}')
-        return ' || '.join(conversation_end)
-    else:
-        return '🤷'
+channels = ['news'] # ['youtube', 'spotify', 'news', 'wikipedia', 'tiktok']
 
 
 chat_history = get_chat_history()
@@ -122,8 +97,8 @@ def display_content(content_item):
         st.write(f'{content_item["content_excerpt"]}')
         st.write(f'{content_item["content_url"]}')
     else:
-        st.write(f'{content_item["content_title"]}')
-        st.write(f'{content_item["content_excerpt"]}')
+        st.markdown(f'**{content_item["content_title"]}**')
+        st.markdown(f'{content_item["content_excerpt"]}')
         st.write(f'{content_item["content_url"]}')
 
 
@@ -147,8 +122,8 @@ def load_next_query_result():
                     },
                     'content_id': st.session_state.content_item['content_id'],
                     'content_metadata': {
-                        'source': st.session_state.content_item['channel'],
-                        'title': st.session_state.content_item['title'],
+                        'type': st.session_state.content_item['content_type'],
+                        'title': st.session_state.content_item['content_title'],
                         'creator': st.session_state.content_item['creator'],
                         'upload_date': st.session_state.content_item['upload_date']
                     },
@@ -159,7 +134,7 @@ def load_next_query_result():
                 })
             )
             if 'content_item' in st.session_state.keys():
-                st.session_state.last_recommended_item = st.session_state.content_item['title']
+                st.session_state.last_recommended_item = st.session_state.content_item['content_title']
             st.session_state.content_item = st.session_state.recommended_items.pop()
 
 
@@ -172,10 +147,14 @@ def resolve_query_text():
         return ''
 
 
-def run_new_query():
+def run_new_query(change_channel=False):
     if 'content_item' in st.session_state.keys():
-        st.session_state.last_recommended_item = st.session_state.content_item['title']
-    st.session_state.current_channel = 'youtube' #np.random.choice(channels)
+        st.session_state.last_recommended_item = st.session_state.content_item['content_title']
+    if change_channel:
+        st.session_state.current_channel = \
+            np.random.choice([c for c in channels if c != st.session_state.current_channel])
+    else:
+        st.session_state.current_channel = np.random.choice(channels)
     query_text = resolve_query_text()
     if st.session_state.current_channel == 'youtube':
         st.session_state.recommended_items = recommend_from_youtube(
@@ -206,7 +185,7 @@ def run_new_query():
             st.session_state.username,
             dt.now().timestamp(),
             json.dumps({
-                'channel': 'youtube',
+                'channel': st.session_state.content_item['channel'],
                 'mood': mood,
                 'fitness_level': fitness_level,
                 'context': {
@@ -217,8 +196,8 @@ def run_new_query():
                 },
                 'content_id': st.session_state.content_item['content_id'],
                 'content_metadata': {
-                    'type': 'youtube_video',
-                    'title': st.session_state.content_item['title'],
+                    'type': st.session_state.content_item['content_type'],
+                    'title': st.session_state.content_item['content_title'],
                     'creator': st.session_state.content_item['creator'],
                     'upload_date': st.session_state.content_item['upload_date']
                 },
@@ -228,16 +207,21 @@ def run_new_query():
                 'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
             })
         )
-        st.session_state.last_youtube_video = st.session_state.content_item['title']
+        st.session_state.last_recommended_item = st.session_state.content_item['content_title']
         st.session_state.content_item = st.session_state.recommended_items.pop()
+    else:
+        try:
+            run_new_query(change_channel=True)
+        except ValueError:
+            st.session_state.clear()
 
 
 if 'recommended_items' in st.session_state.keys() and len(st.session_state.recommended_items) > 0:
     if 'content_item' in st.session_state.keys():
-        st.session_state.last_recommended_item = st.session_state.content_item['title']
+        st.session_state.last_recommended_item = st.session_state.content_item['content_title']
     next_recommended_content_item = st.session_state.recommended_items.pop()
     st.session_state.content_item = next_recommended_content_item
-    content_memory.chat_memory.add_ai_message(next_recommended_content_item['title'])
+    content_memory.chat_memory.add_ai_message(next_recommended_content_item['content_title'])
     display_content(next_recommended_content_item)
     st.session_state.interaction_start_time = dt.now().timestamp()
     if st.button('Interacted', on_click=load_next_query_result()):

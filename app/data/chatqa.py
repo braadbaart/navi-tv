@@ -1,5 +1,3 @@
-import json
-
 import weaviate
 import streamlit as st
 
@@ -108,7 +106,7 @@ def store_qa_pair(client, username, user_prompt, agent_response, user_prompt_dt)
     )
 
 
-def similarity_search(client, username, user_prompt, timestamp, max_distance=0.15):
+def chat_similarity_search(client, username, user_prompt, timestamp, max_distance=0.15):
     try:
         response = client.query\
             .get('ChatQAPair', ['chat', 'timestamp', 'datetime'])\

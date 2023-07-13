@@ -1,0 +1,5 @@
+_type: prompt
+input_variables:
+    ["style", "topic", "subject", "current_item"]
+template:
+    Generate a news article titles with a {style} style. The article should be about {topic} and discuss {subject}. The title should be different from an article about {current_item}.

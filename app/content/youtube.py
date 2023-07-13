@@ -33,7 +33,7 @@ def build_youtube_api():
 youtube = build_youtube_api()
 
 
-@st.cache_data()
+@st.cache_data
 def search_youtube(generated_query):
     query = generated_query.split('\n')[-1].replace('For example:', '') \
         if len(generated_query.split('\n')) > 0 else generated_query
@@ -76,9 +76,9 @@ def parse_youtube_video_search_results(youtube_search_results):
         if res['id']['kind'] == 'youtube#video':
             content_items.append({
                 'channel': 'youtube',
-                'content_type': 'youtube_video',
+                'content_type': 'video',
                 'content_id': res['id']['videoId'],
-                'title': res['snippet']['title'],
+                'content_title': res['snippet']['title'],
                 'creator': res['snippet']['channelTitle'],
                 'upload_date': res['snippet']['publishedAt']
             })

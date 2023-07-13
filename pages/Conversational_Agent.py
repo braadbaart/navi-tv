@@ -21,7 +21,7 @@ from langchain.memory import RedisChatMessageHistory, ConversationBufferWindowMe
 from langchain.schema import messages_to_dict
 from langchain.chains import ConversationChain
 
-from app.data.weaviate import create_chat_schema, store_qa_pair, similarity_search
+from app.data.chatqa import create_chat_schema, store_qa_pair, chat_similarity_search
 
 
 st.set_page_config(page_title='Navi conversational AI agent demo')
@@ -153,13 +153,13 @@ def process_user_input():
 
 def generate_response(user_prompt, user_prompt_dt):
     if len(user_prompt) > 0 and len(st.session_state.chat_log) == 0:
-        chat_excerpt = similarity_search(vector_db, username, user_prompt, get_timestamp())
+        chat_excerpt = chat_similarity_search(vector_db, username, user_prompt, get_timestamp())
     elif len(st.session_state.chat_log) > 0:
         memory_trigger = ''
         for line in st.session_state.chat_log[-3:]:
             memory_trigger += line['message'] + '\n' if len(line['message']) < 200 else line['message'][0:200] + '\n'
         memory_trigger += user_prompt
-        chat_excerpt = similarity_search(vector_db, username, memory_trigger, get_timestamp())
+        chat_excerpt = chat_similarity_search(vector_db, username, memory_trigger, get_timestamp())
     else:
         chat_excerpt = None
     if chat_excerpt:
