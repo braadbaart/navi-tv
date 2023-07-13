@@ -65,6 +65,7 @@ def parse_newsapi_response(response):
             'content_id': article['url'],
             'content_title': article['title'],
             'content_excerpt': article['description'],
+            'content_image': article['urlToImage'],
             'content_url': article['url']
         }
         for article in response['articles']
@@ -79,5 +80,5 @@ def recommend_from_newsapi(
         subject = st.session_state.user_feedback
     else:
         subject = resolve_news_article_subject(mental_energy, fitness_level, motion_state)
-    current_articles = search_newsapi(f'{topic} {subject}')
+    current_articles = search_newsapi(f'{topic} {subject} {query_text}')
     return parse_newsapi_response(current_articles)

@@ -47,7 +47,7 @@ def search_youtube(generated_query):
 
 @st.cache_data
 def generate_youtube_query(_llm, _memory, style_, mood_, energy_, fitness_, motion_, text):
-    previous_video = st.session_state.last_youtube_video if 'last_youtube_video' in st.session_state.keys() else ''
+    last_item = st.session_state.last_recommended_item if 'last_recommended_item' in st.session_state.keys() else ''
     youtube_query_prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template_file(
             template_file=os.path.join(file_path, '../prompts/content/youtube.yaml'),
@@ -61,7 +61,7 @@ def generate_youtube_query(_llm, _memory, style_, mood_, energy_, fitness_, moti
             mental_energy=energy_,
             fitness_level=fitness_,
             motion_state=motion_,
-            current_video=previous_video
+            current_video=last_item
         ),
         MessagesPlaceholder(variable_name='history'),
         HumanMessagePromptTemplate.from_template('{input}')
