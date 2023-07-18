@@ -19,7 +19,9 @@ from app.data.redis import get_chat_history, parse_chat_message
 
 file_path = os.path.dirname(__file__)
 st.session_state.username = 'grumpy_old_fool'
-
+st.session_state.clicked_on_item = False
+st.session_state.not_interested = False
+st.session_state.change_channel = False
 
 @st.cache_resource
 def init_userdb_connection():
@@ -113,14 +115,16 @@ def display_content(content_item):
 
 def load_next_query_result():
     if 'recommended_items' in st.session_state:
-        if len(st.session_state.recommended_items) > 0:
-            clicked_on_item = \
-                False if 'clicked_on_item' not in st.session_state.keys() else st.session_state.clicked_on_item
+        if len(st.session_state.recommended_items) > 1:
+            if 'content_item' in st.session_state.keys():
+                st.session_state.last_recommended_item = st.session_state.content_item['content_title']
+            next_content_item = st.session_state.recommended_items.pop()
+            st.session_state.content_item = next_content_item
             contentdb.hset(
                 st.session_state.username,
                 dt.now().timestamp(),
                 json.dumps({
-                    'channel': st.session_state.content_item['channel'],
+                    'channel': next_content_item['channel'],
                     'mood': mood,
                     'fitness_level': fitness_level,
                     'context': {
@@ -129,22 +133,16 @@ def load_next_query_result():
                         'motion_state': motion_state,
                         'mental_energy': mental_energy
                     },
-                    'content_id': st.session_state.content_item['content_id'],
+                    'content_id': next_content_item['content_id'],
                     'content_metadata': {
-                        'type': st.session_state.content_item['content_type'],
-                        'title': st.session_state.content_item['content_title'],
-                        'creator': st.session_state.content_item['creator'],
-                        'upload_date': st.session_state.content_item['upload_date']
-                    },
-                    'engagement': {
-                        'clicked_on_item': clicked_on_item
+                        'type': next_content_item['content_type'],
+                        'title': next_content_item['content_title'],
+                        'creator': next_content_item['creator'],
+                        'upload_date': next_content_item['upload_date']
                     },
                     'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
                 })
             )
-            if 'content_item' in st.session_state.keys():
-                st.session_state.last_recommended_item = st.session_state.content_item['content_title']
-            st.session_state.content_item = st.session_state.recommended_items.pop()
 
 
 def resolve_query_text():
@@ -156,45 +154,49 @@ def resolve_query_text():
         return ''
 
 
-def run_new_query(change_channel=False):
+def run_new_query():
     if 'content_item' in st.session_state.keys():
         st.session_state.last_recommended_item = st.session_state.content_item['content_title']
-    if change_channel:
-        st.session_state.current_channel = \
+    if st.session_state.change_channel:
+        current_channel = \
             np.random.choice([c for c in channels if c != st.session_state.current_channel])
+        st.session_state.current_channel = current_channel
     else:
-        st.session_state.current_channel = np.random.choice(channels)
+        current_channel = np.random.choice(channels)
+        st.session_state.current_channel = current_channel
     query_text = resolve_query_text()
-    if st.session_state.current_channel == 'youtube':
+    if current_channel == 'youtube':
         st.session_state.recommended_items = recommend_from_youtube(
             llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
         )
-    elif st.session_state.current_channel == 'spotify':
+    elif current_channel == 'spotify':
         st.session_state.recommended_items = recommend_from_spotify(
             llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
         )
-    elif st.session_state.current_channel == 'tiktok':
+    elif current_channel == 'tiktok':
         st.session_state.recommended_items = recommend_from_tiktok(
             llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
         )
-    elif st.session_state.current_channel == 'news':
+    elif current_channel == 'news':
         st.session_state.recommended_items = recommend_from_newsapi(
             llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
         )
-    else:
+    elif current_channel == 'wikipedia':
         st.session_state.recommended_items = recommend_from_wikipedia(
             llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
         )
+    else:
+        st.session_state.change_channel = True
+        run_new_query()
 
     if 'recommended_items' in st.session_state and len(st.session_state.recommended_items) > 0:
-        st.session_state.content_item = st.session_state.recommended_items.pop()
-        clicked_on_item = \
-            False if 'clicked_on_item' not in st.session_state.keys() else st.session_state.clicked_on_item
+        content_item = st.session_state.recommended_items.pop()
+        st.session_state.content_item = content_item
         contentdb.hset(
             st.session_state.username,
             dt.now().timestamp(),
             json.dumps({
-                'channel': st.session_state.content_item['channel'],
+                'channel': content_item['channel'],
                 'mood': mood,
                 'fitness_level': fitness_level,
                 'context': {
@@ -203,24 +205,20 @@ def run_new_query(change_channel=False):
                     'motion_state': motion_state,
                     'mental_energy': mental_energy
                 },
-                'content_id': st.session_state.content_item['content_id'],
+                'content_id': content_item['content_id'],
                 'content_metadata': {
-                    'type': st.session_state.content_item['content_type'],
-                    'title': st.session_state.content_item['content_title'],
-                    'creator': st.session_state.content_item['creator'],
-                    'upload_date': st.session_state.content_item['upload_date']
-                },
-                'engagement': {
-                    'clicked_on_item': clicked_on_item
+                    'type': content_item['content_type'],
+                    'title': content_item['content_title'],
+                    'creator': content_item['creator'],
+                    'upload_date': content_item['upload_date']
                 },
                 'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
             })
         )
-        st.session_state.last_recommended_item = st.session_state.content_item['content_title']
-        st.session_state.content_item = st.session_state.recommended_items.pop()
     else:
         try:
-            run_new_query(change_channel=True)
+            st.session_state.change_channel = True
+            run_new_query()
         except ValueError:
             st.session_state.clear()
 
@@ -233,11 +231,33 @@ if 'recommended_items' in st.session_state.keys() and len(st.session_state.recom
     content_memory.chat_memory.add_ai_message(next_recommended_content_item['content_title'])
     display_content(next_recommended_content_item)
     st.session_state.interaction_start_time = dt.now().timestamp()
-    if st.button('Interacted', on_click=load_next_query_result()):
-        st.session_state.clicked_on_item = True
-    else:
-        st.session_state.clicked_on_item = False
-    st.button('Next item', on_click=load_next_query_result())
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+    with col1:
+        if st.button('Liked'):
+            content_memory.chat_memory.add_user_message('clicked_on_item')
+            st.session_state.clicked_on_item = True
+            load_next_query_result()
+        else:
+            st.session_state.clicked_on_item = False
+    with col2:
+        if st.button('Not interested'):
+            content_memory.chat_memory.add_user_message('not_interested')
+            st.session_state.not_interested = True
+            load_next_query_result()
+        else:
+            st.session_state.not_interested = False
+    with col3:
+        if st.button('Next item'):
+            content_memory.chat_memory.add_user_message('next_item')
+            load_next_query_result()
+    with col4:
+        if st.button('Change channel'):
+            content_memory.chat_memory.add_user_message('change_channel')
+            st.session_state.change_channel = True
+            run_new_query()
+            load_next_query_result()
+        else:
+            st.session_state.change_channel = False
     st.text_input('Change the tune: ', value='', key='user_feedback', on_change=run_new_query)
     if 'user_feedback' in st.session_state.keys():
         content_memory.chat_memory.add_user_message(st.session_state.user_feedback)
