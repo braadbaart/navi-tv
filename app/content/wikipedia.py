@@ -36,7 +36,10 @@ def generate_wikipedia_query(_llm, _memory, topic_, text):
 def search_wikipedia(query):
     if len(query) > 300:
         query = query[:300]
-    return wikipedia.search(query, results=3)
+    try:
+        return wikipedia.search(query, results=3)
+    except wikipedia.DisambiguationError:
+        return []
 
 
 def parse_wikipedia_search_results(search_results):
@@ -56,7 +59,7 @@ def parse_wikipedia_search_results(search_results):
                 'content_image': page.images[0] if len(page.images) > 0 else '',
                 'content_url': page.url
             })
-        except wikipedia.PageError:
+        except wikipedia.PageError or wikipedia.DisambiguationError:
             pass
     return content_items
 
