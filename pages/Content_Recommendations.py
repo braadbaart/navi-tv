@@ -154,12 +154,28 @@ def resolve_query_text():
         return ''
 
 
+def set_channel():
+    if 'current_channel' not in st.session_state.keys():
+        return np.random.choice(channels, p=[0.6, 0.3, 0.05, 0.05])
+    else:
+        channel_options = []
+        probabilities = []
+        excess_probability = 0.0
+        for c, p in zip(channels, [0.6, 0.3, 0.05, 0.05]):
+            if c != st.session_state.current_channel:
+                channel_options.append(c)
+                probabilities.append(p)
+            else:
+                excess_probability += p
+        probabilities[0] = probabilities[0] + excess_probability
+        return np.random.choice(channel_options, p=probabilities)
+
+
 def run_new_query():
     if 'content_item' in st.session_state.keys():
         st.session_state.last_recommended_item = st.session_state.content_item['content_title']
     if st.session_state.change_channel:
-        current_channel = \
-            np.random.choice([c for c in channels if c != st.session_state.current_channel])
+        current_channel = set_channel()
         st.session_state.current_channel = current_channel
     else:
         current_channel = np.random.choice(channels)

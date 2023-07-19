@@ -11,6 +11,9 @@ st.set_page_config(
 
 username = 'grumpy_old_fool'
 
+st.markdown('**Welcome to Navi TV!** 📺')
+st.markdown('Your home-grown personal multimedia brewery - where the Hallmark channel meets MTV inside an LLM 📺♥️🤖')
+
 
 def get_base64(bin_file):
     with open(bin_file, 'rb') as f:
