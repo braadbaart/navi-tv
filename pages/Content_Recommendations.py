@@ -23,6 +23,7 @@ st.session_state.clicked_on_item = False
 st.session_state.not_interested = False
 st.session_state.change_channel = False
 
+
 @st.cache_resource
 def init_userdb_connection():
     return redis.StrictRedis(host='localhost', port=st.secrets['redis']['port'], db=0)
@@ -118,7 +119,7 @@ def load_next_query_result():
         if len(st.session_state.recommended_items) > 1:
             if 'content_item' in st.session_state.keys():
                 st.session_state.last_recommended_item = st.session_state.content_item['content_title']
-            next_content_item = st.session_state.recommended_items.pop()
+            next_content_item = st.session_state.recommended_items[0]
             st.session_state.content_item = next_content_item
             contentdb.hset(
                 st.session_state.username,
@@ -270,6 +271,7 @@ if 'recommended_items' in st.session_state.keys() and len(st.session_state.recom
         if st.button('Change channel'):
             content_memory.chat_memory.add_user_message('change_channel')
             st.session_state.change_channel = True
+            st.session_state.clear()
             run_new_query()
             load_next_query_result()
         else:

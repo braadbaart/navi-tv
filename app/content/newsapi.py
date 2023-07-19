@@ -47,7 +47,7 @@ newsapi_client = build_newsapi_client()
 
 
 @st.cache_data
-def search_newsapi(query, date_range=7, max_results=10):
+def search_newsapi(query, date_range=3, max_results=10):
     earliest_date = (dt.now() - timedelta(days=date_range)).strftime('%Y-%M-%d')
     return newsapi_client.get_everything(
         q=query, language='en', from_param=earliest_date, page_size=max_results, sort_by='relevancy'
