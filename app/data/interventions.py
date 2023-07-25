@@ -18,7 +18,7 @@ def create_intervention_schema():
         'vectorizer': 'text2vec-openai',
         'properties': [
             {
-                'name': 'username',
+                'name': 'user_data',
                 'dataType': ['text'],
                 'moduleConfig': {
                     'text2vec-openai': {
@@ -101,7 +101,7 @@ def create_intervention_schema():
 def store_intervention_response(client, username, intervention, user_follow_up_action, intervention_dt):
     client.data_object.create(
          {
-            'username': username,
+            'user_data': username,
             'intervention': intervention,
             'user_action': user_follow_up_action,
             'timestamp': int(dt.now().timestamp()),
@@ -116,7 +116,7 @@ def intervention_outcome_search(client, username, intervention, timestamp, max_d
         response = client.query\
             .get('Intervention', ['intervention', 'timestamp', 'datetime'])\
             .with_where({
-                'path': ['username'],
+                'path': ['user_data'],
                 'operator': 'Equal',
                 'valueText': username
             })\

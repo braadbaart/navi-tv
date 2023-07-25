@@ -1,6 +1,7 @@
 import os
 import json
 import redis
+import weaviate
 import numpy as np
 import streamlit as st
 
@@ -11,14 +12,16 @@ from langchain.memory import ConversationBufferWindowMemory
 
 from app.content.youtube import recommend_from_youtube
 from app.content.spotify import recommend_from_spotify
-from app.content.tiktok import recommend_from_tiktok
 from app.content.newsapi import recommend_from_newsapi
 from app.content.wikipedia import recommend_from_wikipedia
 
 from app.data.redis import get_chat_history, parse_chat_message
+from app.data.recommendations import \
+    create_uuid_from_string, create_content_recommendation_schema,\
+    create_recommendation_user, store_recommendation
 
 file_path = os.path.dirname(__file__)
-st.session_state.username = 'grumpy_old_fool'
+user_data = {'username': 'grumpy_old_fool'}
 st.session_state.clicked_on_item = False
 st.session_state.not_interested = False
 st.session_state.change_channel = False
@@ -32,6 +35,40 @@ def init_userdb_connection():
 userdb = init_userdb_connection()
 
 
+@st.cache_data
+def get_user_data(username, _target_mood, _fitness_level, _mental_energy, _motion_state):
+    userdata = userdb.hgetall(username)
+    if 'username' in userdata.keys():
+        if 'user_rec_id' not in userdata.keys():
+            userdata['user_rec_id'] = create_uuid_from_string(username)
+            userdb.hset(username, 'user_rec_id', userdata['user_rec_id'])
+    else:
+        userdb.hset(username, 'username', username)
+        rec_id = create_uuid_from_string(username)
+        userdb.hset(username, 'user_rec_id', rec_id)
+        userdata = {'username': username, 'user_rec_id': rec_id}
+    if 'conversational_style' not in userdata.keys():
+        userdata['conversational_style'] = 'goat crazy'
+    userdata['target_mood'] = _target_mood
+    userdata['fitness_level'] = _fitness_level
+    userdata['mental_energy'] = _mental_energy
+    userdata['motion_state'] = _motion_state
+    return userdata
+
+
+target_mood = st.selectbox('Target mood', ['happy', 'surprised', 'sad',  'excited', 'angry', 'afraid'],)
+fitness_level = st.selectbox('Fitness level', ['neutral', 'tired', 'ready to go'])
+mental_energy = st.selectbox('Mental energy', ['neutral', 'depleted', 'fully charged'])
+motion_state = st.selectbox(
+    'Motion state',
+    ['sitting down', 'lying down', 'seated for a long time', 'just got up', 'standing', 'walking', 'running']
+)
+
+st.session_state.user_data = get_user_data(
+    user_data['username'], target_mood, fitness_level, mental_energy, motion_state
+)
+
+
 @st.cache_resource
 def init_contentdb_connection():
     return redis.StrictRedis(host='localhost', port=st.secrets['redis']['port'], db=2)
@@ -40,54 +77,48 @@ def init_contentdb_connection():
 contentdb = init_contentdb_connection()
 
 
-def log_interaction(username, user_action):
-    if 'content_item_' in st.session_state.keys():
-        content_metadata = {
-            'type': st.session_state.content_item['content_type'],
-            'title': st.session_state.content_item['content_title'],
-            'creator': st.session_state.content_item['creator'],
-            'upload_date': st.session_state.content_item['upload_date']
+@st.cache_resource
+def init_recommendationdb_client(user_data_):
+    client = weaviate.Client(
+        url=f'http://{st.secrets["weaviate"]["host"]}:{st.secrets["weaviate"]["port"]}',
+        additional_headers={
+            'X-OpenAI-Api-Key': st.secrets['llms']['openai_api_key']
         }
+    )
+    create_content_recommendation_schema(client)
+    create_recommendation_user(client, user_data_)
+    return client
+
+
+recdb= init_recommendationdb_client(st.session_state.user_data)
+
+
+def log_content_interaction(user_data_, user_action=None, content=None):
+    if content:
+        content_metadata = {
+            'type': content['content_type'],
+            'title': content['content_title'],
+            'creator': content['creator'],
+            'upload_date': content['upload_date']
+        }
+        store_recommendation(recdb, user_data_, content, user_action)
     else:
         content_metadata = {}
     contentdb.hset(
-        username,
+        user_data['username'],
         int(dt.now().timestamp()),
         json.dumps({
+            'channel': content['channel'],
+            'target_mood': user_data_['target_mood'],
+            'fitness_level': user_data_['fitness_level'],
             'context': {
                 'day_of_week': dt.now().isoweekday(),
                 'hour_of_day': dt.now().strftime('%H'),
-                'motion_state': motion_state,
-                'mental_energy': mental_energy
+                'motion_state': user_data_['motion_state'],
+                'mental_energy': user_data_['mental_energy']
             },
             'content_metadata': content_metadata,
             'user_action': user_action,
-            'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
-        })
-    )
-
-
-def log_content_item(username, content_item_):
-    contentdb.hset(
-        username,
-        int(dt.now().timestamp()),
-        json.dumps({
-            'channel': content_item_['channel'],
-            'mood': mood,
-            'fitness_level': fitness_level,
-            'context': {
-                'day_of_week': dt.now().isoweekday(),
-                'hour_of_day': dt.now().strftime('%H'),
-                'motion_state': motion_state,
-                'mental_energy': mental_energy
-            },
-            'content_id': content_item_['content_id'],
-            'content_metadata': {
-                'type': content_item_['content_type'],
-                'title': content_item_['content_title'],
-                'creator': content_item_['creator'],
-                'upload_date': content_item_['upload_date']
-            },
             'user_datetime': dt.now().strftime('%Y-%m-%dT%H:%M:%S')
         })
     )
@@ -100,7 +131,7 @@ def get_recommendation_memory(username):
 
 
 llm = ChatOpenAI(openai_api_key=st.secrets['llms']['openai_api_key'], temperature=0.7)
-content_memory = get_recommendation_memory(st.session_state.username)
+content_memory = get_recommendation_memory(st.session_state.user_data['username'])
 
 
 channels = ['youtube', 'spotify', 'news', 'wikipedia']
@@ -108,29 +139,6 @@ channels = ['youtube', 'spotify', 'news', 'wikipedia']
 
 chat_history = get_chat_history()
 conversation_ending = parse_chat_message(chat_history)
-
-mood = st.selectbox(
-    'Target mood',
-    ['surprised', 'sad', 'happy', 'excited', 'angry', 'afraid'],
-)
-current_mood = st.session_state.user_emotion if 'user_emotion' in st.session_state.keys() else mood
-
-fitness_level = st.selectbox(
-    'Fitness level',
-    ['neutral', 'tired', 'ready to go']
-)
-
-mental_energy = st.selectbox(
-    'Mental energy',
-    ['neutral', 'depleted', 'fully charged']
-)
-
-motion_state = st.selectbox(
-    'Motion state',
-    ['sitting down', 'lying down', 'seated for a long time', 'just got up', 'standing', 'walking', 'running']
-)
-
-style = st.session_state.conversational_style if 'conversational_style' in st.session_state else 'exciting'
 
 
 def display_content(item):
@@ -142,8 +150,6 @@ def display_content(item):
                     + ', on \"' + item['content_source'] + '\"')
         st.audio(item['content_id'])
         st.write(item['content_url'])
-    elif item['channel'] == 'tiktok':
-        st.video(f'https://www.tiktok.com/@{item["content_id"]}')
     elif item['channel'] == 'news':
         st.write(f'{item["content_title"]}')
         st.write(f'{item["content_excerpt"]}')
@@ -206,25 +212,20 @@ def run_new_query(change_channel=False):
     query_text = resolve_query_text()
     if current_channel == 'youtube':
         st.session_state.recommended_items = recommend_from_youtube(
-            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+            llm, content_memory, st.session_state.user_data, query_text, recdb
         )
     elif current_channel == 'spotify':
         st.session_state.recommended_items = recommend_from_spotify(
-            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
-        )
-    elif current_channel == 'tiktok':
-        st.session_state.recommended_items = recommend_from_tiktok(
-            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+            llm, content_memory, st.session_state.user_data, query_text, recdb
         )
     elif current_channel == 'news':
         st.session_state.recommended_items = recommend_from_newsapi(
-            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+            llm, content_memory, st.session_state.user_data, query_text, recdb
         )
     elif current_channel == 'wikipedia':
         st.session_state.recommended_items = recommend_from_wikipedia(
-            llm, content_memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
+            llm, content_memory, st.session_state.user_data, query_text, recdb
         )
-
     else:
         try:
             st.session_state.change_channel = True
@@ -236,7 +237,7 @@ def run_new_query(change_channel=False):
 if 'recommended_items' not in st.session_state.keys() or len(st.session_state.recommended_items) == 0:
     run_new_query(change_channel=True)
 content_item = st.session_state.recommended_items[0]
-log_content_item(st.session_state.username, content_item)
+log_content_interaction(st.session_state.user_data, user_action=None, content=content_item)
 content_memory.chat_memory.add_ai_message(content_item['content_title'])
 st.session_state.last_content_item = content_item['content_title']
 display_content(content_item)
@@ -246,31 +247,33 @@ with col1:
     if st.button('Liked', on_click=load_next_query_result):
         content_memory.chat_memory.add_user_message('liked')
         st.session_state.clicked_on_item = True
-        log_interaction(st.session_state.username, 'liked')
+        log_content_interaction(st.session_state.user_data, 'hasLiked', content_item)
     else:
         st.session_state.clicked_on_item = False
 with col2:
     if st.button('Not interested', on_click=load_next_query_result):
         content_memory.chat_memory.add_user_message('not_interested')
         st.session_state.not_interested = True
-        log_interaction(st.session_state.username, 'not_interested')
+        log_content_interaction(st.session_state.user_data, 'notInterested', content_item)
     else:
         st.session_state.not_interested = False
 with col3:
     if st.button('Next item', on_click=load_next_query_result):
         content_memory.chat_memory.add_user_message('next_item')
-        log_interaction(st.session_state.username, 'next_item')
+        log_content_interaction(st.session_state.user_data, 'clickedNextItem', content_item)
 with col4:
     if st.button('Refresh', on_click=st.session_state.clear):
         content_memory.chat_memory.add_user_message('refresh')
         st.session_state.change_channel = True
-        log_interaction(st.session_state.username, 'refresh')
+        log_content_interaction(st.session_state.user_data, 'hasRefreshed', content_item)
     else:
         st.session_state.change_channel = False
 st.text_input('Change the tune: ', value='', key='user_feedback', on_change=run_new_query)
 if 'user_feedback' in st.session_state.keys() and st.session_state.user_feedback != '':
-    st.write('running new query..')
+    st.write('Running new query..')
     content_memory.chat_memory.add_user_message(st.session_state.user_feedback)
-    log_interaction(st.session_state.username, f'User feedback: {st.session_state.user_feedback}')
+    log_content_interaction(
+        st.session_state.user_data, 'changedTune', content_item
+    )
 
 st.write(st.session_state)

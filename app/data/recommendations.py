@@ -1,138 +1,128 @@
-import weaviate
+import uuid
+import hashlib
 import streamlit as st
 
 from datetime import datetime as dt
 
+from weaviate.exceptions import ObjectAlreadyExistsException
 
-def create_content_recommendation_schema():
-    class_obj = {
-        'class': 'ContentRecommendation',
-        'description': 'A content recommendation and user reaction.',
-        'moduleConfig': {
-            'text2vec-openai': {
-                'skip': False,
-                'vectorizeClassName': False,
-                'vectorizePropertyName': False
-            }
-        },
-        'vectorizer': 'text2vec-openai',
-        'properties': [
-            {
-                'name': 'username',
-                'dataType': ['text'],
-                'moduleConfig': {
-                    'text2vec-openai': {
-                        'skip': True,
-                        'vectorizePropertyName': False,
-                        'vectorizeClassName': False
-                    }
-                }
-            },
-            {
-                'name': 'datetime',
-                'dataType': ['text'],
-                'moduleConfig': {
-                    'text2vec-openai': {
-                        'skip': True,
-                        'vectorizePropertyName': False,
-                        'vectorizeClassName': False
-                    }
-                }
-            },
-            {
-                'name': 'timestamp',
-                'dataType': ['int'],
-                'moduleConfig': {
-                    'text2vec-openai': {
-                        'skip': True,
-                        'vectorizePropertyName': False,
-                        'vectorizeClassName': False
-                    }
-                }
-            },
-            {
-                'name': 'recommendation',
-                'dataType': ['text']
-            },
-            {
-                'name': 'user_reaction',
-                'dataType': ['text']
-            },
-        ],
-        'vectorIndexType': 'hnsw',
-        'vectorIndexConfig': {
-            'skip': False,
-            'cleanupIntervalSeconds': 300,
-            'pq': {
-                'enabled': False,
-                'bitCompression': False,
-                'segments': 0,
-                'centroids': 256,
-                'encoder': {
-                    'type': 'kmeans',
-                    'distribution': 'log-normal'
-                }
-            },
-            'maxConnections': 64,
-            'efConstruction': 128,
-            'ef': -1,
-            'dynamicEfMin': 100,
-            'dynamicEfMax': 500,
-            'dynamicEfFactor': 8,
-            'vectorCacheMaxObjects': 2000000,
-            'flatSearchCutoff': 40000,
-            'distance': 'cosine'
-        }
-    }
 
-    client = weaviate.Client(
-        url=f'http://{st.secrets["weaviate"]["host"]}:{st.secrets["weaviate"]["port"]}',
-        additional_headers={
-            'X-OpenAI-Api-Key': st.secrets['llms']['openai_api_key']
-        }
-    )
+from app.data.schema.recommendations import recommendation_objects
 
+
+def create_content_recommendation_schema(client):
     try:
-        client.schema.create_class(class_obj)
-    except:
-        print('Weaviate schema class already exists')
+        client.schema.create(recommendation_objects)
+    except Exception as e:
+        print(f'Weaviate content recommendation schema already exists: {e}')
 
 
-def store_recommendation_response_pair(client, username, recommendation, result, recommendation_dt):
-    client.data_object.create(
-         {
-            'username': username,
-            'recommendation': recommendation,
-            'user_reaction': result,
-            'timestamp': int(dt.now().timestamp()),
-            'datetime': recommendation_dt
-         },
-         'ContentRecommendation'
-    )
+def create_recommendation_user(client, user_data):
+    if not client.data_object.get_by_id(user_data['user_rec_id'], class_name='RecommendationUser'):
+        client.data_object.create(
+            uuid=user_data['user_rec_id'],
+            class_name='RecommendationUser',
+            data_object={'username': user_data['username']},
+        )
 
 
-def recommendation_similarity_search(client, username, recommendation, timestamp, max_distance=0.15):
+def create_uuid_from_string(content_id):
+    hex_string = hashlib.md5(content_id.encode('UTF-8')).hexdigest()
+    return str(uuid.UUID(hex=hex_string))
+
+
+def store_recommendation(client, user_data, content, user_action=None):
+    recommendation_dt = dt.now()
+    content_id = create_uuid_from_string(user_data['username'] + content['content_id'])
+    try:
+        if not user_action:
+            client.data_object.create(
+                class_name='ContentRecommendation',
+                uuid=content_id,
+                data_object={
+                    'username': user_data['username'],
+                    'channel': content['channel'],
+                    'creator': content['creator'],
+                    'title': content['content_title'],
+                    'description': content['content_description'],
+                    'user_action': 'seen',
+                    'datetime': recommendation_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                    'timestamp': int(recommendation_dt.timestamp())
+                },
+            )
+            client.data_object.reference.add(
+                from_class_name='RecommendationUser',
+                from_uuid=user_data['user_rec_id'],
+                from_property_name='recommendation',
+                to_class_name='ContentRecommendation',
+                to_uuid=content_id,
+            )
+        else:
+            client.data_object.update(
+                uuid=content_id,
+                class_name='ContentRecommendation',
+                data_object={
+                    'user_action': user_action,
+                    'datetime': recommendation_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                    'timestamp': int(recommendation_dt.timestamp())
+                }
+            )
+            client.data_object.reference.add(
+                from_class_name='RecommendationUser',
+                from_uuid=user_data['user_rec_id'],
+                from_property_name=user_action,
+                to_class_name='ContentRecommendation',
+                to_uuid=content_id,
+            )
+    except ObjectAlreadyExistsException:
+        client.data_object.update(
+            uuid=content_id,
+            class_name='ContentRecommendation',
+            data_object={
+                'user_action': user_action,
+                'datetime': recommendation_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                'timestamp': int(recommendation_dt.timestamp())
+            }
+        )
+
+
+def basic_recommendation_search(client, username, channel, search_query, max_distance=0.15):
+    cleaned_query = search_query.replace(':', '').replace('"', '')
     try:
         response = client.query\
-            .get('ContentRecommendation', ['recommendation', 'timestamp', 'datetime'])\
+            .get('ContentRecommendation',
+                 ['title', 'creator', 'description', 'user_action', 'datetime', 'timestamp'])\
             .with_where({
                 'path': ['username'],
                 'operator': 'Equal',
                 'valueText': username
-            })\
-            .with_near_text({'concepts': [recommendation]}) \
-            .with_limit(5) \
-            .with_additional(['distance']) \
+            }) \
+            .with_where({
+                'path': ['channel'],
+                'operator': 'Equal',
+                'valueText': channel
+             }) \
+            .with_hybrid(query=cleaned_query, alpha=max_distance) \
+            .with_limit(10) \
             .do()
-        query_results = sorted(response['data']['Get']['ContentRecommendation'], key=lambda x: x['timestamp'])
-        if len(query_results) > 0:
-            recommendations = []
-            for rec in query_results:
-                if (timestamp - rec['timestamp']) < (60 * 60 * 24 * 30) \
-                        and rec['_additional']['distance'] < max_distance:
-                    recommendations.append(rec['recommendation'])
-            return recommendations
+        st.write(response)
+        if 'data' in response.keys() and response['data']['Get']['ContentRecommendation']:
+            query_results = sorted(response['data']['Get']['ContentRecommendation'], key=lambda x: x['timestamp'])
+            if len(query_results) > 0:
+                return query_results
+            else:
+                return []
         else:
             return []
     except ValueError:
         return []
+
+
+# def ref2vec_recommendation_search(client, userdata, search_query):
+#     cleaned_query = search_query.replace(':', '')
+#     try:
+#         response = client.query\
+#             .get({
+#                 'ContentRecommendation',
+#                 '
+#         })

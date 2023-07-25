@@ -1,10 +1,9 @@
 import redis
 import base64
-import weaviate
 import streamlit as st
 
 st.set_page_config(
-    page_title='Navi demo',
+    page_title='Navi TV',
     page_icon='images/logo.png',
     layout='wide',
 )
@@ -12,7 +11,7 @@ st.set_page_config(
 username = 'grumpy_old_fool'
 
 st.markdown('**Welcome to Navi TV!** 📺')
-st.markdown('Your home-grown personal multimedia brewery - where the Hallmark channel meets MTV inside an LLM 📺♥️🤖')
+st.markdown('Your own home-grown personal multimedia brewery - where the Hallmark channel meets MTV inside an LLM 📺♥️🤖')
 
 
 def get_base64(bin_file):
@@ -37,24 +36,24 @@ def set_background(png_file):
 # def check_password():
 #     def password_entered():
 #         if (
-#             st.session_state["username"] in st.secrets["passwords"]
+#             st.session_state["user_data"] in st.secrets["passwords"]
 #             and st.session_state["password"]
-#             == st.secrets["passwords"][st.session_state["username"]]
+#             == st.secrets["passwords"][st.session_state["user_data"]]
 #         ):
 #             st.session_state["password_correct"] = True
 #             del st.session_state["password"]
-#             del st.session_state["username"]
+#             del st.session_state["user_data"]
 #         else:
 #             st.session_state["password_correct"] = False
 #
 #     if "password_correct" not in st.session_state:
-#         st.text_input("Username", on_change=password_entered, key="username")
+#         st.text_input("Username", on_change=password_entered, key="user_data")
 #         st.text_input(
 #             "Password", type="password", on_change=password_entered, key="password"
 #         )
 #         return False
 #     elif not st.session_state["password_correct"]:
-#         st.text_input("Username", on_change=password_entered, key="username")
+#         st.text_input("Username", on_change=password_entered, key="user_data")
 #         st.text_input(
 #             "Password", type="password", on_change=password_entered, key="password"
 #         )
@@ -86,8 +85,8 @@ def get_user_data():
     if userdata:
         return userdata
     else:
-        userdb.hset(username, 'username', username)
-        return {'username': username}
+        userdb.hset(username, 'user_data', username)
+        return {'user_data': username}
 
 
 user_data = get_user_data()

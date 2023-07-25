@@ -1,5 +1,0 @@
-_type: prompt
-input_variables:
-    ["style", "target_mood", "mental_energy", "fitness_level", "motion_state", "current_video"]
-template:
-    Generate a TikTok search query for videos with a {style} style. The video should be able to get someone who is mentally {mental_energy} and {motion_state} in a {target_mood} mood, with {fitness_level} energy levels. The search query result should be different from a {current_video} video.

@@ -19,18 +19,18 @@ topic_matrix = {
 }
 
 
-def resolve_news_article_subject(mental_energy, fitness_level, motion_state):
-    if mental_energy == 'depleted':
+def resolve_news_article_subject(user_data):
+    if user_data['mental_energy'] == 'depleted':
         return 'politics'
-    elif mental_energy == 'fully charged':
+    elif user_data['mental_energy'] == 'fully charged':
         return 'music'
-    elif fitness_level == 'tired':
+    elif user_data['fitness_level'] == 'tired':
         return 'health'
-    elif fitness_level == 'ready to go':
+    elif user_data['fitness_level'] == 'ready to go':
         return 'sports'
-    elif motion_state == 'still':
+    elif 'down' in user_data['motion_state']:
         return 'entertainment'
-    elif motion_state == 'moving':
+    elif user_data['motion_state'] == 'moving':
         return 'technology'
     else:
         return 'business'

@@ -10,6 +10,7 @@ from langchain.prompts import (
 )
 from langchain.chains import ConversationChain
 
+from app.data.recommendations import basic_recommendation_search
 
 file_path = os.path.dirname(__file__)
 
@@ -55,7 +56,7 @@ def parse_wikipedia_search_results(search_results):
                 'content_source': 'wikipedia',
                 'content_id': page.pageid,
                 'content_title': result,
-                'content_excerpt': page.summary,
+                'content_description': page.summary,
                 'content_image': page.images[0] if len(page.images) > 0 else '',
                 'content_url': page.url
             })
@@ -64,28 +65,28 @@ def parse_wikipedia_search_results(search_results):
     return content_items
 
 
-def resolve_wikipedia_topic(style, current_mood, mental_energy, fitness_level, motion_state):
-    if style == 'millenial':
+def resolve_wikipedia_topic(user_data):
+    if user_data['conversational_style'] == 'millenial':
         return 'trivia'
-    elif current_mood == 'happy':
+    elif user_data['target_mood'] == 'happy':
         return 'entertainment'
-    elif mental_energy == 'depleted':
+    elif user_data['mental_energy'] == 'depleted':
         return 'history'
-    elif fitness_level == 'neutral':
+    elif user_data['fitness_level'] == 'neutral':
         return 'science'
-    elif motion_state == 'sitting down':
+    elif user_data['motion_state'] == 'sitting down':
         return 'geography'
     else:
         return 'mystery'
 
 
-def recommend_from_wikipedia(
-        llm, memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
-):
-    topic = resolve_wikipedia_topic(style, current_mood, mental_energy, fitness_level, motion_state)
+def recommend_from_wikipedia(llm, memory, user_data, query_text, weaviate_client):
+    topic = resolve_wikipedia_topic(user_data)
     wikipedia_query = generate_wikipedia_query(llm, memory, topic, query_text)
     st.write(wikipedia_query)
     search_results = search_wikipedia(wikipedia_query)
+    history = basic_recommendation_search(
+        weaviate_client, user_data['username'], 'wikipedia', wikipedia_query)
     return parse_wikipedia_search_results(search_results)
 
 

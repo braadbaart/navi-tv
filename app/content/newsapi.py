@@ -19,16 +19,16 @@ file_path = os.path.dirname(__file__)
 
 
 @st.cache_data
-def generate_newsapi_query(_llm, _memory, style_, topic_, subject_, text):
+def generate_newsapi_query(_llm, _memory, user_data, text):
     last_item = st.session_state.last_recommended_item if 'last_recommended_item' in st.session_state.keys() else ''
     newsapi_query_prompt = ChatPromptTemplate.from_messages([
         SystemMessagePromptTemplate.from_template_file(
             template_file=os.path.join(file_path, '../prompts/content/newsapi.yaml'),
             input_variables=['style', 'topic', 'subject', 'current_item']
         ).format(
-            style=style_,
-            topic=topic_,
-            subject=subject_,
+            style=user_data['conversational_style'],
+            topic=topic_matrix.get(user_data['target_mood']),
+            subject=resolve_news_article_subject(user_data),
             current_item=last_item
         ),
         MessagesPlaceholder(variable_name='history'),
@@ -54,7 +54,7 @@ def search_newsapi(query, date_range=2, max_results=10):
     )
 
 
-def parse_newsapi_response(response):
+def parse_newsapi_response(response, recommendation_history=None):
     return [
         {
             'channel': 'newsapi',
@@ -64,7 +64,7 @@ def parse_newsapi_response(response):
             'content_source': article['source']['name'],
             'content_id': article['url'],
             'content_title': article['title'],
-            'content_excerpt': article['description'],
+            'content_description': article['description'],
             'content_image': article['urlToImage'],
             'content_url': article['url']
         }
@@ -72,13 +72,12 @@ def parse_newsapi_response(response):
     ]
 
 
-def recommend_from_newsapi(
-        llm, memory, style, current_mood, mental_energy, fitness_level, motion_state, query_text
-):
-    topic = topic_matrix.get(current_mood)
+def recommend_from_newsapi(llm, memory, user_data, query_text, weaviate_client):
+    topic = topic_matrix.get(user_data['target_mood'])
     if 'user_feedback' in st.session_state.keys():
         subject = st.session_state.user_feedback
     else:
-        subject = resolve_news_article_subject(mental_energy, fitness_level, motion_state)
+        subject = resolve_news_article_subject(user_data)
     current_articles = search_newsapi(f'{topic} {subject} {query_text}')
-    return parse_newsapi_response(current_articles)
+    history = []
+    return parse_newsapi_response(current_articles, recommendation_history=history)
