@@ -39,11 +39,11 @@ services:
       ENABLE_COMPOUND_SPLITTING: 'false'
     ports:
     - '9999:9999'
-#  streamlit:
-#    image: navi-demo
-#    build:
-#      context: .
-#    ports:
-#      - '8501:8501'
+  streamlit:
+    image: navi-demo
+    build:
+      context: .
+    ports:
+      - '8501:8501'
 volumes:
   data:

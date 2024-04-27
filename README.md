@@ -3,6 +3,8 @@ Navi demo web app
 
 Streamlit research testbed for the Navi app ML engine.
 
+>> **Note**: This is an unfinished and untested research project. It is full of bugs and holes!
+
 **Conversational**
 
 - Memory

@@ -27,7 +27,7 @@ from app.data.chatqa import create_chat_schema, store_qa_pair, chat_similarity_s
 st.set_page_config(page_title='Navi conversational AI agent demo')
 st.session_state.waiting_for_user_input = True
 
-username = 'grumpy_old_fool'
+username = 'ok_boomer'
 
 file_path = os.path.dirname(__file__)
 conversational_style = st.session_state['conversational_style'] if 'conversational_style' in st.session_state else ''
