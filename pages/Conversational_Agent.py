@@ -48,7 +48,7 @@ if 'chat_session_start_time' not in st.session_state:
 
 @st.cache_resource
 def init_userdb_connection():
-    return redis.StrictRedis(host='localhost', port=st.secrets['redis']['port'], db=0)
+    return redis.StrictRedis(host=st.secrets['redis']['host'], port=st.secrets['redis']['port'], db=0)
 
 
 userdb = init_userdb_connection()
@@ -79,7 +79,7 @@ intialise_vector_db_schema()
 @st.cache_resource
 def get_vector_store_client():
     return weaviate.Client(
-            url="http://localhost:5051",
+            url=f"http://{st.secrets['weaviate']['host']}:{st.secrets['weaviate']['port']}",
             additional_headers={
                 "X-OpenAI-Api-Key": st.secrets['llms']['openai_api_key']
             }
@@ -108,7 +108,11 @@ def detect_emotion(text):
 
 
 def get_history():
-    return RedisChatMessageHistory(session_id=username, url='redis://localhost:6379/1', key_prefix=':conv')
+    return RedisChatMessageHistory(
+        session_id=username,
+        url=f'redis://{st.secrets["redis"]["host"]}:{st.secrets["redis"]["port"]}/1',
+        key_prefix=':conv'
+    )
 
 
 prompt = ChatPromptTemplate.from_messages([

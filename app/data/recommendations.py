@@ -116,13 +116,3 @@ def basic_recommendation_search(client, username, channel, search_query, max_dis
             return []
     except ValueError:
         return []
-
-
-# def ref2vec_recommendation_search(client, userdata, search_query):
-#     cleaned_query = search_query.replace(':', '')
-#     try:
-#         response = client.query\
-#             .get({
-#                 'ContentRecommendation',
-#                 '
-#         })

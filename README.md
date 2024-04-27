@@ -3,7 +3,7 @@ Navi demo web app
 
 Streamlit research testbed for the Navi app ML engine.
 
->> **Note**: This is an unfinished and untested research project. It is full of bugs and holes!
+>> **Note**: This is an unfinished research project. It is full of bugs and holes!
 
 **Conversational**
 
@@ -32,3 +32,15 @@ Use prompt tuning to improve and personalise the prompt generation NLP models.
 **AI trainer**
 
 AutoGPT capabilities to automate mundane repetitive tasks for users.
+
+#### Development
+
+Requires docker and a text editor.
+
+1. Copy `.streamlint/secrets-template.toml` to `.streamlint/secrets.toml` and fill in the secrets. 
+2. Copy `.streamlit/youtube-api-example-config.json` to `.streamlit/youtube-api.json` and fill in the YouTube API config.
+3. Run `OPENAI_APIKEY=<your-api-key> docker-compose up -d`.
+
+The Streamlit app should now be available at `http://localhost:8501`.
+
+Happy hacking!

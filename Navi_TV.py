@@ -8,7 +8,7 @@ st.set_page_config(
     layout='wide',
 )
 
-username = 'grumpy_old_fool'
+username = 'ok_boomer'
 
 st.markdown('**Welcome to Navi TV!** 📺')
 st.markdown('Your own home-grown personal multimedia brewery - where the Hallmark channel meets MTV inside an LLM 📺♥️🤖')
@@ -33,47 +33,17 @@ def set_background(png_file):
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
 
-# def check_password():
-#     def password_entered():
-#         if (
-#             st.session_state["user_data"] in st.secrets["passwords"]
-#             and st.session_state["password"]
-#             == st.secrets["passwords"][st.session_state["user_data"]]
-#         ):
-#             st.session_state["password_correct"] = True
-#             del st.session_state["password"]
-#             del st.session_state["user_data"]
-#         else:
-#             st.session_state["password_correct"] = False
-#
-#     if "password_correct" not in st.session_state:
-#         st.text_input("Username", on_change=password_entered, key="user_data")
-#         st.text_input(
-#             "Password", type="password", on_change=password_entered, key="password"
-#         )
-#         return False
-#     elif not st.session_state["password_correct"]:
-#         st.text_input("Username", on_change=password_entered, key="user_data")
-#         st.text_input(
-#             "Password", type="password", on_change=password_entered, key="password"
-#         )
-#         st.error("😕 User not known or password incorrect")
-#         return False
-#     else:
-#         return True
-
-
-# set_background("images/earth_globe.png")
-#
-#
-# if check_password():
 set_background("images/night_sky.png")
 
 
 @st.cache_resource
 def init_userdb_connection():
     return redis.StrictRedis(
-        host='localhost', port=st.secrets['redis']['port'], charset="utf-8", decode_responses=True, db=0
+        host=st.secrets['redis']['host'],
+        port=st.secrets['redis']['port'],
+        charset="utf-8",
+        decode_responses=True,
+        db=0
     )
 
 

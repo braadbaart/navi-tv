@@ -21,7 +21,7 @@ from app.data.recommendations import \
     create_recommendation_user, store_recommendation
 
 file_path = os.path.dirname(__file__)
-user_data = {'username': 'grumpy_old_fool'}
+user_data = {'username': 'ok_boomer'}
 st.session_state.clicked_on_item = False
 st.session_state.not_interested = False
 st.session_state.change_channel = False
@@ -29,7 +29,7 @@ st.session_state.change_channel = False
 
 @st.cache_resource
 def init_userdb_connection():
-    return redis.StrictRedis(host='localhost', port=st.secrets['redis']['port'], db=0)
+    return redis.StrictRedis(host=st.secrets['redis']['host'], port=st.secrets['redis']['port'], db=0)
 
 
 userdb = init_userdb_connection()
@@ -71,7 +71,7 @@ st.session_state.user_data = get_user_data(
 
 @st.cache_resource
 def init_contentdb_connection():
-    return redis.StrictRedis(host='localhost', port=st.secrets['redis']['port'], db=2)
+    return redis.StrictRedis(host=st.secrets['redis']['host'], port=st.secrets['redis']['port'], db=2)
 
 
 contentdb = init_contentdb_connection()

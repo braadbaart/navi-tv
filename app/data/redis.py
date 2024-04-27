@@ -3,11 +3,10 @@ import streamlit as st
 from langchain.memory import RedisChatMessageHistory
 from langchain.schema import messages_to_dict
 
-
 def get_chat_history():
     return RedisChatMessageHistory(
         session_id=st.session_state.user_data['username'],
-        url='redis://localhost:6379/1',
+        url=f'redis://{st.secrets["redis"]["host"]}:{st.secrets["redis"]["port"]}/1',
         key_prefix=':conv'
     ).messages
 
