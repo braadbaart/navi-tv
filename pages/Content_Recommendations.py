@@ -101,7 +101,8 @@ def log_content_interaction(user_data_, user_action=None, content=None):
             'creator': content['creator'],
             'upload_date': content['upload_date']
         }
-        store_recommendation(recdb, user_data_, content, user_action)
+        if user_action and content:
+            store_recommendation(recdb, user_data_, content, user_action)
     else:
         content_metadata = {}
     contentdb.hset(
@@ -275,5 +276,3 @@ if 'user_feedback' in st.session_state.keys() and st.session_state.user_feedback
     log_content_interaction(
         st.session_state.user_data, 'changedTune', content_item
     )
-
-st.write(st.session_state)

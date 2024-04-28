@@ -27,12 +27,6 @@ Architecture sketch: content recommendations
 - Generate prompt for channel and return list of content titles
 - Use the RRI vector to filter content titles & descriptions
 
-Use prompt tuning to improve and personalise the prompt generation NLP models.
-
-**AI trainer**
-
-AutoGPT capabilities to automate mundane repetitive tasks for users.
-
 #### Development
 
 Requires docker and a text editor.
