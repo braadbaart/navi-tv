@@ -1,7 +1,7 @@
-Navi demo web app
------------------
+Navi TV web app
+---------------
 
-Streamlit research testbed for the Navi app ML engine.
+Streamlit research testbed for an LLM-driven conversational content recommendation system.
 
 >> **Note**: This is an unfinished research project. It is full of bugs and holes!
 
